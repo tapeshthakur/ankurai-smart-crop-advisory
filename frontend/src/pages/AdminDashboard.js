@@ -278,11 +278,11 @@ function AdminDashboard() {
     scales: {
       x: {
         ticks: { color: "#6B665C" },
-        grid: { color: "rgba(47, 82, 51, 0.10)" },
+        grid: { display: false },
       },
       y: {
         ticks: { color: "#6B665C" },
-        grid: { color: "rgba(47, 82, 51, 0.10)" },
+        grid: { display: false },
       },
     },
   };
@@ -644,7 +644,8 @@ function AdminDashboard() {
                   <p className="text-sm text-text-muted">{t("admin.activitySubtitle")}</p>
                 </div>
 
-                <div className="overflow-hidden rounded-[1.4rem] border border-surface-border bg-surface-card">
+                <div className="overflow-x-auto rounded-[1.4rem] border border-surface-border bg-surface-card">
+                  <div className="min-w-[540px]">
                   <div className="grid grid-cols-[1.2fr,0.9fr,0.8fr] gap-3 border-b border-surface-border px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-text-subtle">
                     <span>{t("admin.recentEntry")}</span>
                     <span>{t("admin.crop")}</span>
@@ -669,6 +670,7 @@ function AdminDashboard() {
                     </div>
                   ))}
                   {!recentPredictions.length ? <p className="px-4 py-4 text-sm text-text-muted">{t("admin.noPredictionData")}</p> : null}
+                  </div>
                 </div>
               </div>
               </>

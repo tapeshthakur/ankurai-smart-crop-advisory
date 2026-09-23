@@ -16,3 +16,20 @@ tmp/
 
 # Testing cache
 .pytest_cache/
+
+# Large datasets
+backend/data/
+ml/data/
+
+# Large trained model directories
+ml/models/pest_outbreak/
+ml/models/preliminary_unified/
+ml/models/preliminary_unified_v2/
+ml/models/preliminary_unified_v3/
+ml/models/preliminary_unified_v4/
+
+# Model files
+*.pkl
+
+# Logs
+*.log

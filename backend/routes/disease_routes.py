@@ -35,7 +35,7 @@ def detect_disease_route():
         return jsonify({"error": "Image size must be 5 MB or less."}), 400
 
     try:
-        result = analyse_leaf_image(image_bytes)
+        result = analyse_leaf_image(image_bytes, crop_context=request.form.get("crop", "").strip().lower())
         return jsonify({"result": result}), 200
     except Exception:
         return jsonify({"error": "Could not analyse this image. Please upload a clear leaf photo."}), 400

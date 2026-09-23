@@ -6,6 +6,14 @@ import { AuthProvider } from "./auth/AuthContext";
 import { LanguageProvider } from "./i18n/LanguageContext";
 import "./index.css";
 
+if (process.env.NODE_ENV === "production" && "serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register(`${process.env.PUBLIC_URL || ""}/service-worker.js`).catch((error) => {
+      console.error("AnkurAI service worker registration failed", error);
+    });
+  });
+}
+
 const container = document.getElementById("root");
 const root = createRoot(container);
 

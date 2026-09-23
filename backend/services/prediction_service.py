@@ -5,6 +5,7 @@ from typing import Any, Dict
 
 import pandas as pd
 from database.db import insert_prediction
+from config import settings
 from models import model_loader
 from utils.preprocessor import (
     PreprocessingError,
@@ -62,16 +63,27 @@ def predict_crop(input_data: Dict[str, Any], user_id: int | None = None) -> Dict
     confidence = float(probabilities[best_index])
     top_indices = probabilities.argsort()[-5:][::-1]
 
+    top_crops = [
+        {
+            "crop": str(classes[index]) if len(classes) > index else str(index),
+            "confidence": float(probabilities[index]),
+        }
+        for index in top_indices
+    ]
+
+    is_low_confidence = confidence < settings.crop_confidence_threshold
+
     result = {
         "predicted_crop": predicted_class,
         "confidence": confidence,
-        "top_crops": [
-            {
-                "crop": str(classes[index]) if len(classes) > index else str(index),
-                "confidence": float(probabilities[index]),
-            }
-            for index in top_indices
-        ],
+        "confidence_threshold": settings.crop_confidence_threshold,
+        "is_low_confidence": is_low_confidence,
+        "confidence_note": (
+            "Low-confidence recommendation. Review the top alternatives before making a decision."
+            if is_low_confidence
+            else "Recommendation confidence is above the configured threshold."
+        ),
+        "top_crops": top_crops,
     }
     _safe_log_prediction(
         input_payload=cleaned_input,

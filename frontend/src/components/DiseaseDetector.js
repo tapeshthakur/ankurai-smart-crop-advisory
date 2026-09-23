@@ -56,7 +56,7 @@ function DiseaseDetector() {
       setLoading(true);
       setError("");
       const response = await api.post("/api/disease/detect", formData, { headers: { "Content-Type": "multipart/form-data" } });
-      setResult(response.data.result || null);
+       setResult(response.data.result || null);
     } catch (err) {
       setError(err.response?.data?.error || t("disease.failed"));
     } finally {
@@ -88,15 +88,15 @@ function DiseaseDetector() {
   const qualityWarnings = result?.upload_quality?.warnings || [];
 
   return (
-    <section className="surface-card p-6">
+    <section className="surface-card p-4 sm:p-6">
       <div className="mb-6 flex flex-col gap-2">
         <span className="section-badge">{t("disease.module")}</span>
-        <h2 className="text-3xl font-semibold text-text-heading">{t("disease.title")}</h2>
+        <h2 className="text-2xl font-semibold text-text-heading sm:text-3xl">{t("disease.title")}</h2>
         <p className="max-w-2xl text-sm leading-6 text-text-muted">{t("disease.subtitle")}</p>
       </div>
 
       <div className="grid gap-4 xl:grid-cols-[0.95fr,1.05fr]">
-        <label
+        <div
           onDragOver={(event) => {
             event.preventDefault();
             setDragging(true);
@@ -111,7 +111,7 @@ function DiseaseDetector() {
             "flex cursor-pointer flex-col rounded-[1.7rem] text-center transition-all duration-200",
             previewUrl
               ? "border border-surface-border/55 bg-surface-card p-3"
-              : "min-h-[340px] items-center justify-center border-2 border-dashed p-5",
+              : "min-h-[260px] items-center justify-center border-2 border-dashed p-5 sm:min-h-[340px]",
             dragging
               ? "border-accent-400 bg-accent-50"
               : "border-surface-border bg-surface-muted hover:border-accent-300",
@@ -131,6 +131,10 @@ function DiseaseDetector() {
                   </span>
                 </div>
                 <p className="mt-3 text-left text-xs leading-5 text-text-subtle">{t("disease.changeImage")}</p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <label htmlFor="disease-camera" className="disease-capture-button disease-capture-button-primary">CAM <span>Retake</span></label>
+                  <label htmlFor="disease-gallery" className="disease-capture-button">IMG <span>Change photo</span></label>
+                </div>
               </div>
               <div className="mt-3 rounded-[1.1rem] border border-accent-200 bg-accent-50 p-4 text-left">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-accent-700">
@@ -181,13 +185,24 @@ function DiseaseDetector() {
               </div>
             </div>
           ) : (
-            <div>
+            <div className="w-full">
+              <div className="disease-camera-mark">LD</div>
               <p className="text-xl font-semibold text-text-heading">{t("disease.drop")}</p>
               <p className="mt-3 text-sm leading-6 text-text-muted">{t("disease.browse")}</p>
+              <div className="disease-capture-actions mt-5">
+                <label htmlFor="disease-camera" className="disease-capture-button disease-capture-button-primary">CAM <span>Take photo</span></label>
+                <label htmlFor="disease-gallery" className="disease-capture-button">IMG <span>Choose photo</span></label>
+              </div>
+              <div className="disease-quality-guide mt-5">
+                <span>1 leaf</span>
+                <span>Good light</span>
+                <span>No blur</span>
+              </div>
             </div>
           )}
-          <input type="file" accept="image/png,image/jpeg,image/jpg" className="hidden" onChange={(event) => chooseFile(event.target.files?.[0])} />
-        </label>
+          <input id="disease-camera" type="file" accept="image/png,image/jpeg,image/jpg" capture="environment" className="hidden" onChange={(event) => chooseFile(event.target.files?.[0])} />
+          <input id="disease-gallery" type="file" accept="image/png,image/jpeg,image/jpg" className="hidden" onChange={(event) => chooseFile(event.target.files?.[0])} />
+        </div>
 
         <div className="surface-card-soft p-5">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -195,7 +210,7 @@ function DiseaseDetector() {
               <h3 className="text-xl font-semibold text-text-heading">{t("disease.result")}</h3>
               <p className="mt-1 text-sm text-text-muted">{t("disease.resultSubtitle")}</p>
             </div>
-            <button type="button" onClick={detectDisease} disabled={loading || !file} className="theme-button-primary px-4 py-3 disabled:opacity-60">
+            <button type="button" onClick={detectDisease} disabled={loading || !file} className="theme-button-primary w-full px-4 py-3 sm:w-auto disabled:opacity-60">
               {t("disease.detect")}
             </button>
           </div>
@@ -210,7 +225,9 @@ function DiseaseDetector() {
                 <div className="mt-3 grid gap-4 lg:grid-cols-[1fr,auto] lg:items-end">
                   <div>
                     <p className="text-sm font-semibold uppercase tracking-[0.16em] text-text-subtle">{result.plant || t("disease.unknownPlant")}</p>
-                    <p className="mt-2 text-3xl font-bold text-text-heading">{result.condition || translateDiseaseName(result.disease)}</p>
+                    <p className="mt-2 text-3xl font-bold text-text-heading">
+                      {result.is_healthy ? t("disease.healthyStatus", "Healthy") : (result.condition || translateDiseaseName(result.disease))}
+                    </p>
                   </div>
                   <div className="flex flex-wrap gap-2 lg:justify-end">
                     <p className="rounded-full border border-accent-200 bg-accent-50 px-3 py-1 text-sm font-semibold text-accent-700">
@@ -222,6 +239,16 @@ function DiseaseDetector() {
                   </div>
                 </div>
                 <p className="mt-3 text-sm capitalize text-text-muted">{t("disease.severity")}: {tv("statuses", result.severity)}</p>
+                {result.warning ? (
+                  <p className="mt-3 rounded-2xl border border-warning-100 bg-warning-50 px-4 py-3 text-sm leading-6 text-warning-700">
+                    {result.warning}
+                  </p>
+                ) : null}
+                {result.crop_mismatch?.message ? (
+                  <p className="mt-3 rounded-2xl border border-danger-100 bg-danger-50 px-4 py-3 text-sm leading-6 text-danger-700">
+                    {result.crop_mismatch.message}
+                  </p>
+                ) : null}
                 {result.needs_review ? (
                   <p className="mt-3 rounded-2xl border border-warning-100 bg-warning-50 px-4 py-3 text-sm leading-6 text-warning-700">
                     {t("disease.reviewWarning")}

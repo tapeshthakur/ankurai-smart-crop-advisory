@@ -15,7 +15,9 @@ from routes.crop_routes import crop_bp
 from routes.disease_routes import disease_bp
 from routes.irrigation_routes import irrigation_bp
 from routes.market_routes import market_bp
+from routes.pest_routes import pest_bp
 from routes.system_routes import system_bp
+from routes.farm_routes import farm_bp
 from leaf_disease.inference import warmup_leaf_disease_model
 from leaf_disease.routes import leaf_disease_bp
 from utils.logger import setup_logging
@@ -38,7 +40,9 @@ def create_app() -> Flask:
     app.register_blueprint(leaf_disease_bp)
     app.register_blueprint(irrigation_bp)
     app.register_blueprint(market_bp)
+    app.register_blueprint(pest_bp)
     app.register_blueprint(system_bp)
+    app.register_blueprint(farm_bp)
     if os.getenv("FLASK_SKIP_STARTUP_MODEL_WARMUP") != "1":
         warmup_leaf_disease_model()
 

@@ -2,6 +2,10 @@ from __future__ import annotations
 
 import io
 import json
+import logging
+import os
+import tempfile
+import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
@@ -10,6 +14,9 @@ import numpy as np
 from PIL import Image, ImageOps
 
 from config import settings
+
+
+LOGGER = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -78,6 +85,7 @@ INVALID_CLASS_NAMES = {"plantvillage"}
 SUPPORTED_PLANTS = {"pepper bell", "potato", "tomato"}
 CNN_IMAGE_SIZE = (224, 224)
 MIN_CONFIDENT_MARGIN = 12.0
+CNN_CONFIDENCE_THRESHOLD = float(os.getenv("DISEASE_CONFIDENCE_THRESHOLD", "0.80"))
 
 
 def _percentage(mask: np.ndarray) -> float:
@@ -90,7 +98,11 @@ def _top_three(scores: Dict[str, float]) -> List[Tuple[str, float]]:
 
 def _model_paths() -> Tuple[Path, Path]:
     model_dir = settings.ml_dir / "models"
-    return model_dir / "disease_cnn.keras", model_dir / "disease_class_names.json"
+    v4_dir = model_dir / "preliminary_unified_v4"
+    return (
+        Path(os.getenv("DISEASE_MODEL_PATH", str(v4_dir / "agrointel_unified_mobilenetv2_v4.keras"))),
+        Path(os.getenv("DISEASE_LABELS_PATH", str(v4_dir / "class_names.json"))),
+    )
 
 
 def _clean_class_name(class_name: str) -> str:
@@ -119,6 +131,25 @@ def _split_plant_condition(class_name: str) -> Tuple[str, str]:
 
 
 def _profile_for_class(class_name: str) -> DiseaseProfile:
+    guidance_path = Path(__file__).resolve().parents[1] / "leaf_disease" / "treatment_guidance.json"
+    if guidance_path.exists():
+        try:
+            guidance = json.loads(guidance_path.read_text(encoding="utf-8"))
+            exact = guidance.get(class_name)
+            if exact:
+                return DiseaseProfile(
+                    name=exact.get("description") or _clean_class_name(class_name),
+                    treatment=exact.get("treatment") or "Detailed advisory information is not available for this detected condition yet.",
+                    prevention="Monitor the crop regularly and confirm treatment with a local agricultural extension officer.",
+                    next_steps=(
+                        "Retake a clear close-up image if symptoms are uncertain.",
+                        "Inspect nearby plants for similar symptoms.",
+                        "Confirm treatment with local agricultural guidance.",
+                    ),
+                )
+        except (OSError, ValueError, TypeError):
+            pass
+
     lowered = class_name.lower()
     if "healthy" in lowered:
         return DISEASE_PROFILES["Healthy Leaf"]
@@ -283,6 +314,7 @@ def _result_payload(
     observations: Dict[str, Any] | None = None,
     next_steps: Tuple[str, ...] | List[str] | None = None,
     prediction_margin: float | None = None,
+    crop_context: str | None = None,
 ) -> Dict[str, Any]:
     confidence_status = _confidence_status(confidence)
     quality_warnings = upload_quality.get("warnings", []) if upload_quality else []
@@ -292,6 +324,7 @@ def _result_payload(
     return {
         "disease": disease,
         "plant": plant,
+        "crop_context": crop_context or None,
         "condition": condition or disease,
         "confidence": round(float(confidence), 2),
         "confidence_status": confidence_status,
@@ -309,6 +342,61 @@ def _result_payload(
     }
 
 
+def _load_keras_model(tf: Any, model_path: Path) -> Any:
+    """Load a Keras archive, tolerating initializer metadata from newer Keras."""
+    class CompatibleGlorotUniform(tf.keras.initializers.GlorotUniform):
+        def __init__(self, *args, input_axes=None, output_axes=None, **kwargs):
+            super().__init__(*args, **kwargs)
+
+        @classmethod
+        def from_config(cls, config):
+            config = dict(config)
+            config.pop("input_axes", None)
+            config.pop("output_axes", None)
+            return cls(**config)
+
+    custom_objects = {
+        "GlorotUniform": CompatibleGlorotUniform,
+        "keras.initializers.GlorotUniform": CompatibleGlorotUniform,
+    }
+    try:
+        return tf.keras.models.load_model(model_path, compile=False, custom_objects=custom_objects)
+    except (TypeError, ValueError):
+        LOGGER.info("Using compatibility loader for disease model metadata: %s", model_path)
+
+    temporary_path = None
+    try:
+        with zipfile.ZipFile(model_path, "r") as source:
+            with tempfile.NamedTemporaryFile(suffix=".keras", delete=False) as temporary:
+                temporary_path = Path(temporary.name)
+            with zipfile.ZipFile(temporary_path, "w") as target:
+                for entry in source.infolist():
+                    data = source.read(entry.filename)
+                    if entry.filename == "config.json":
+                        config = json.loads(data.decode("utf-8"))
+
+                        def strip_initializer_axes(value):
+                            if isinstance(value, dict):
+                                value.pop("input_axes", None)
+                                value.pop("output_axes", None)
+                                value.pop("renorm", None)
+                                value.pop("renorm_clipping", None)
+                                value.pop("renorm_momentum", None)
+                                for child in value.values():
+                                    strip_initializer_axes(child)
+                            elif isinstance(value, list):
+                                for child in value:
+                                    strip_initializer_axes(child)
+
+                        strip_initializer_axes(config)
+                        data = json.dumps(config).encode("utf-8")
+                    target.writestr(entry, data)
+        return tf.keras.models.load_model(temporary_path, compile=False)
+    finally:
+        if temporary_path is not None:
+            temporary_path.unlink(missing_ok=True)
+
+
 def _load_cnn_model():
     global _CNN_MODEL, _CNN_CLASS_NAMES
 
@@ -322,16 +410,26 @@ def _load_cnn_model():
     try:
         import tensorflow as tf
 
-        _CNN_MODEL = tf.keras.models.load_model(model_path)
         _CNN_CLASS_NAMES = json.loads(class_names_path.read_text(encoding="utf-8"))
+        if not isinstance(_CNN_CLASS_NAMES, list) or not all(isinstance(name, str) for name in _CNN_CLASS_NAMES):
+            raise ValueError(f"Disease labels must be a JSON list of strings: {class_names_path}")
+
+        _CNN_MODEL = _load_keras_model(tf, model_path)
+        output_shape = getattr(_CNN_MODEL, "output_shape", None)
+        if output_shape is None or int(output_shape[-1]) != len(_CNN_CLASS_NAMES):
+            raise ValueError(
+                f"Disease model output classes ({output_shape[-1] if output_shape else 'unknown'}) "
+                f"do not match labels ({len(_CNN_CLASS_NAMES)})."
+            )
         return _CNN_MODEL, _CNN_CLASS_NAMES
     except Exception:
+        LOGGER.exception("Could not load disease model from %s", model_path)
         _CNN_MODEL = None
         _CNN_CLASS_NAMES = None
         return None, None
 
 
-def _predict_with_cnn(image_bytes: bytes) -> Dict[str, Any] | None:
+def _predict_with_cnn(image_bytes: bytes, crop_context: str | None = None) -> Dict[str, Any] | None:
     model, class_names = _load_cnn_model()
     if model is None or not class_names:
         return None
@@ -340,8 +438,9 @@ def _predict_with_cnn(image_bytes: bytes) -> Dict[str, Any] | None:
         original = ImageOps.exif_transpose(Image.open(io.BytesIO(image_bytes))).convert("RGB")
         quality_arr = np.asarray(original.resize((320, 320))).astype(np.float32)
         upload_quality = _upload_quality(quality_arr)
-        batch = _cnn_input_variants(original)
-        predictions = _normalise_prediction_scores(model.predict(batch, verbose=0).mean(axis=0), class_names)
+        resized = original.resize(CNN_IMAGE_SIZE)
+        batch = np.expand_dims(np.asarray(resized, dtype=np.float32), axis=0)
+        predictions = _normalise_prediction_scores(model.predict(batch, verbose=0)[0], class_names)
     except Exception:
         return None
 
@@ -355,6 +454,9 @@ def _predict_with_cnn(image_bytes: bytes) -> Dict[str, Any] | None:
     disease_label = _clean_class_name(raw_class)
     plant, condition = _split_plant_condition(raw_class)
     is_healthy = "healthy" in raw_class.lower()
+    selected_crop = str(crop_context or "").strip().lower()
+    predicted_crop = plant.strip().lower()
+    crop_mismatch = bool(selected_crop and selected_crop != predicted_crop)
 
     if is_healthy:
         severity = "low"
@@ -365,7 +467,7 @@ def _predict_with_cnn(image_bytes: bytes) -> Dict[str, Any] | None:
     else:
         severity = "low"
 
-    return _result_payload(
+    result = _result_payload(
         disease=disease_label,
         plant=plant,
         condition=condition,
@@ -381,11 +483,41 @@ def _predict_with_cnn(image_bytes: bytes) -> Dict[str, Any] | None:
         observations={},
         upload_quality=upload_quality,
         prediction_margin=prediction_margin,
-        model_note="MobileNetV2 CNN trained on PlantVillage-style leaf disease classes.",
+        model_note="AnkurAI unified MobileNetV2 V4 model with 48 disease and healthy-leaf classes.",
+        crop_context=crop_context,
     )
+    result["class_name"] = raw_class
+    result["is_healthy"] = is_healthy
+    result["detected_crop"] = plant
+
+    if confidence < CNN_CONFIDENCE_THRESHOLD * 100:
+        result["disease"] = "Low confidence prediction"
+        result["condition"] = "Uncertain result"
+        result["treatment"] = "No treatment recommendation is made from this low-confidence image."
+        result["prevention"] = "Retake a sharp, close-up photo of one leaf in natural light."
+        result["next_steps"] = [
+            "Use one leaf photo with good lighting.",
+            "Avoid blur, harsh shadows, and mixed crops.",
+            "Confirm symptoms locally before treating the crop.",
+        ]
+        result["warning"] = "Low confidence prediction. Confirm the result before taking action."
+        result["needs_review"] = True
+
+    if crop_mismatch:
+        result["crop_mismatch"] = {
+            "selected_crop": crop_context,
+            "detected_crop": plant,
+            "message": (
+                f"Selected crop: {crop_context}. Detected crop: {plant}. "
+                "Please verify that the uploaded leaf belongs to the selected crop."
+            ),
+        }
+        result["needs_review"] = True
+
+    return result
 
 
-def analyse_leaf_image(image_bytes: bytes) -> Dict[str, Any]:
+def analyse_leaf_image(image_bytes: bytes, crop_context: str | None = None) -> Dict[str, Any]:
     """
     Leaf disease inference.
 
@@ -393,7 +525,7 @@ def analyse_leaf_image(image_bytes: bytes) -> Dict[str, Any]:
     Otherwise, the service falls back to lightweight colour/texture analysis so
     the app still works on machines without TensorFlow.
     """
-    cnn_result = _predict_with_cnn(image_bytes)
+    cnn_result = _predict_with_cnn(image_bytes, crop_context=crop_context)
     if cnn_result is not None:
         return cnn_result
 
@@ -463,4 +595,5 @@ def analyse_leaf_image(image_bytes: bytes) -> Dict[str, Any]:
         upload_quality=upload_quality,
         prediction_margin=prediction_margin,
         model_note=fallback_reason,
+        crop_context=crop_context,
     )

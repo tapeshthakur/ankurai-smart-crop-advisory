@@ -10,6 +10,7 @@ function Sidebar({ role, moduleItems = [], activeModule, onModuleChange }) {
     disease: "LD",
     market: "MS",
     ai: "AI",
+    soil: "SR",
     history: "RP",
   };
   const links =
@@ -19,7 +20,7 @@ function Sidebar({ role, moduleItems = [], activeModule, onModuleChange }) {
   const isAdmin = role === "admin";
 
   return (
-    <aside className="app-shell ambient-grid h-fit lg:sticky lg:top-24">
+    <aside className="mobile-sidebar app-shell ambient-grid h-fit lg:sticky lg:top-24">
       <div className="relative z-10">
         <span className="section-badge">{isAdmin ? t("sidebar.adminPanel") : t("sidebar.navigation")}</span>
         <h2 className="mt-4 text-2xl font-semibold text-text-heading">

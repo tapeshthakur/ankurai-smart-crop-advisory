@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+from pathlib import Path
 
 np.random.seed(42)
 
@@ -22,7 +23,19 @@ crops = {
     
     "wheat": {"N": (40, 60), "P": (40, 60), "K": (45, 60),
               "temp": (15, 25), "humidity": (60, 75),
-              "ph": (6.0, 7.5), "rainfall": (100, 180)}
+              "ph": (6.0, 7.5), "rainfall": (100, 180)},
+
+    "cotton": {"N": (40, 80), "P": (20, 50), "K": (30, 60),
+               "temp": (25, 35), "humidity": (50, 70),
+               "ph": (5.5, 8.0), "rainfall": (50, 120)},
+
+    "sugarcane": {"N": (80, 140), "P": (40, 80), "K": (60, 120),
+                  "temp": (20, 35), "humidity": (60, 85),
+                  "ph": (6.0, 8.0), "rainfall": (150, 300)},
+
+    "soybean": {"N": (20, 50), "P": (30, 60), "K": (30, 60),
+                "temp": (20, 30), "humidity": (55, 75),
+                "ph": (6.0, 7.5), "rainfall": (250, 450)}
 }
 
 rows_per_crop = 100
@@ -59,7 +72,8 @@ columns = [
 ]
 
 df = pd.DataFrame(data, columns=columns)
-df.to_csv("crop_recommendation.csv", index=False)
+output_path = Path(__file__).with_name("crop_data.csv")
+df.to_csv(output_path, index=False)
 
-print("Dataset generated successfully: crop_recommendation.csv")
+print(f"Dataset generated successfully: {output_path}")
 print("Total rows:", len(df))

@@ -3,6 +3,8 @@ from __future__ import annotations
 from flask import Blueprint, jsonify, request
 
 from services.advisory_service import build_full_advisory
+from services.farm_service import build_rationale
+from flask_jwt_extended import get_jwt
 from utils.auth import role_required
 
 
@@ -31,7 +33,17 @@ def advisory_route():
             season=payload.get("season"),
             state=payload.get("state"),
             top_crops=payload.get("top_crops"),
+            planting_date=payload.get("planting_date"),
         )
+        farm_id = payload.get("farm_id")
+        if farm_id:
+            advisory["rationale"] = build_rationale(
+                user_id=int(get_jwt()["user_id"]),
+                farm_id=int(farm_id),
+                field_id=int(payload["field_id"]) if payload.get("field_id") else None,
+                crop=str(payload["crop"]).strip().lower(),
+                problem=str(payload.get("problem", "")).strip().lower(),
+            )
         return jsonify({"advisory": advisory}), 200
-    except (TypeError, ValueError) as exc:
+    except (LookupError, TypeError, ValueError) as exc:
         return jsonify({"error": f"Invalid advisory payload: {exc}"}), 400

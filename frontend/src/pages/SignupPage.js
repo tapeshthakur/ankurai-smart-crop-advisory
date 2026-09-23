@@ -48,7 +48,7 @@ function SignupPage() {
   return (
     <main className="mx-auto flex min-h-[82vh] w-full max-w-7xl items-center px-4 py-10 sm:px-6 lg:px-8">
       <section className="grid w-full gap-6 lg:grid-cols-[0.9fr,1.1fr]">
-        <div className="surface-card-highlight p-8 lg:p-10">
+        <div className="auth-intro surface-card-highlight p-5 sm:p-8 lg:p-10">
           <span className="section-badge">{t("signup.badge")}</span>
           <h1 className="mt-5 text-4xl font-bold leading-tight text-text-heading">{t("signup.title")}</h1>
           <p className="mt-4 max-w-xl text-base leading-8 text-text-muted">{t("signup.subtitle")}</p>
@@ -65,7 +65,7 @@ function SignupPage() {
           </div>
         </div>
 
-        <section className="surface-card p-8 lg:p-10">
+        <section className="surface-card p-5 sm:p-8 lg:p-10">
           <div className="max-w-xl">
             <span className="section-badge">{t("signup.formBadge")}</span>
             <h2 className="mt-5 text-3xl font-semibold text-text-heading">{t("signup.title")}</h2>

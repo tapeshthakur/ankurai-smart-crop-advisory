@@ -12,6 +12,10 @@ function CropCard({ crop, confidence, irrigation, imageSrc, advisory }) {
     ? Math.max(0, Math.min(100, Number(confidence) <= 1 ? Number(confidence) * 100 : Number(confidence)))
     : 0;
   const irrigationValue = Number.isFinite(Number(irrigation)) ? Number(irrigation).toFixed(4) : "-";
+  const confidenceTone = confidencePercent >= 75 ? "status-good" : confidencePercent >= 50 ? "status-watch" : "status-risk";
+  const irrigationLevel = String(advisory?.irrigation?.level || "").toLowerCase();
+  const irrigationTone = irrigationLevel === "high" ? "status-watch" : "status-info";
+  const seasonTone = advisory?.seasonal_advice?.season_fit ? "status-good" : "status-watch";
   const confidenceStyle = {
     background: `conic-gradient(#2F5233 ${confidencePercent * 3.6}deg, #E7E1D3 0deg)`,
   };
@@ -73,11 +77,14 @@ function CropCard({ crop, confidence, irrigation, imageSrc, advisory }) {
 
   return (
     <div id="advisory-report" className="fade-in-up surface-card overflow-hidden">
-      <div className="border-b border-surface-border bg-surface-card p-4">
+      <div className="border-b border-surface-border bg-surface-card p-4 sm:p-5">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-accent-700">{t("cropCard.reportBadge")}</p>
-            <h3 className="mt-1 text-xl font-semibold text-text-heading">{t("cropCard.reportTitle")}</h3>
+            <div className="mt-1 flex items-center gap-2">
+              <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-primary-700 text-[10px] font-bold text-text-inverse">AI</span>
+              <h3 className="text-xl font-semibold text-text-heading">{t("cropCard.reportTitle")}</h3>
+            </div>
             <p className="mt-1 text-xs leading-5 text-text-muted">
               {t("cropCard.reportDesc")}
             </p>
@@ -100,7 +107,7 @@ function CropCard({ crop, confidence, irrigation, imageSrc, advisory }) {
         <div className="mt-4 grid gap-2 border-t border-accent-200 pt-3 sm:grid-cols-4">
           {[
             { label: t("cropCard.recommended"), value: cropLabel, tone: "text-accent-700" },
-            { label: t("cropCard.confidence"), value: `${confidencePercent.toFixed(1)}%`, tone: "text-text-heading" },
+            { label: t("cropCard.confidence"), value: `${confidencePercent.toFixed(1)}%`, tone: confidenceTone },
             { label: t("cropCard.irrigationRequirement"), value: irrigationValue, tone: "text-text-heading" },
             { label: t("cropCard.season"), value: seasonLabel, tone: "text-text-heading" },
           ].map((item) => (
@@ -117,8 +124,8 @@ function CropCard({ crop, confidence, irrigation, imageSrc, advisory }) {
           <div className="absolute inset-0 bg-gradient-to-t from-primary-900 via-primary-900/30 to-transparent" />
           <div className="absolute inset-x-0 bottom-0 p-4">
             <span className="section-badge">{t("cropCard.recommended")}</span>
-            <p className="mt-3 text-3xl font-bold capitalize text-accent-700 sm:text-4xl">{cropLabel}</p>
-            <p className="mt-2 max-w-md text-xs leading-5 text-text-heading/80">
+            <p className="mt-3 text-3xl font-bold capitalize text-white sm:text-4xl">{cropLabel}</p>
+            <p className="mt-2 max-w-md text-xs leading-5 text-white/85">
               {summaryText}
             </p>
           </div>
@@ -143,7 +150,7 @@ function CropCard({ crop, confidence, irrigation, imageSrc, advisory }) {
                 <div className="mt-1 flex flex-wrap items-end justify-between gap-2">
                   <p className="text-2xl font-bold text-text-heading">{irrigationValue}</p>
                   {advisory?.irrigation?.level ? (
-                    <span className="rounded-full border border-accent-200 bg-accent-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-accent-700">
+                    <span className={`status-chip ${irrigationTone}`}>
                       {tv("statuses", advisory.irrigation.level)}
                     </span>
                   ) : null}
@@ -172,7 +179,7 @@ function CropCard({ crop, confidence, irrigation, imageSrc, advisory }) {
                 <p className="text-[11px] uppercase tracking-[0.2em] text-accent-600">{t("cropCard.aiExplanation")}</p>
                 <h4 className="mt-1 text-lg font-semibold text-text-heading">{t("cropCard.why")}</h4>
               </div>
-              <span className="rounded-full border border-surface-border px-3 py-1 text-xs font-medium text-text-muted">
+              <span className={`status-chip ${seasonTone}`}>
                 {advisory?.seasonal_advice?.season_fit ? t("cropCard.goodFit") : t("cropCard.seasonContext")}
               </span>
             </div>
@@ -227,7 +234,12 @@ function CropCard({ crop, confidence, irrigation, imageSrc, advisory }) {
       </div>
 
       {advisory ? (
-        <div className="grid gap-3 border-t border-accent-200 p-4 lg:grid-cols-[1.15fr,0.85fr]">
+        <details className="advisory-details border-t border-accent-200" open>
+          <summary className="flex cursor-pointer items-center justify-between gap-3 px-4 py-4 text-sm font-semibold text-text-heading">
+            <span>{t("cropCard.moreDetails", "Advisory details")}</span>
+            <span className="text-accent-700">+</span>
+          </summary>
+        <div className="grid gap-3 px-4 pb-4 lg:grid-cols-[1.15fr,0.85fr]">
           <section className="surface-card-soft border-t border-accent-200 p-4">
             <p className="text-[11px] uppercase tracking-[0.2em] text-accent-600">{t("cropCard.fertilizerAdvice")}</p>
             <div className="mt-3 grid gap-3 md:grid-cols-3">
@@ -316,6 +328,7 @@ function CropCard({ crop, confidence, irrigation, imageSrc, advisory }) {
             </section>
           ) : null}
         </div>
+        </details>
       ) : null}
     </div>
   );

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import glob
+import pickle
 import re
 from pathlib import Path
 from typing import Any, List, Tuple
@@ -35,6 +36,14 @@ def _version_key(path: Path) -> Tuple[int, str]:
     return (0, path.name)
 
 
+def _load_model_path(path: Path) -> Any:
+    try:
+        return joblib.load(path)
+    except Exception:
+        with path.open("rb") as fp:
+            return pickle.load(fp)
+
+
 def _load_latest(pattern: str, model_label: str) -> Any:
     candidates = _candidate_paths(pattern)
     if not candidates:
@@ -43,14 +52,29 @@ def _load_latest(pattern: str, model_label: str) -> Any:
         )
 
     latest = sorted(candidates, key=_version_key, reverse=True)[0]
-    return joblib.load(latest)
+    return _load_model_path(latest)
 
 
 def load_latest_classifier() -> Any:
     """Load latest versioned classifier model."""
-    return _load_latest("rf_classifier_*_v*.pkl", "classifier")
+    candidates = [
+        path
+        for path in _candidate_paths("rf_classifier_*_v*.pkl")
+        if "pest_outbreak" not in path.parts and "outbreak_next_7d" not in path.name
+    ]
+    if not candidates:
+        raise FileNotFoundError(
+            f"No crop classifier model found in '{_ml_dir()}' with pattern 'rf_classifier_*_v*.pkl'."
+        )
+    latest = sorted(candidates, key=_version_key, reverse=True)[0]
+    return _load_model_path(latest)
 
 
 def load_latest_regressor() -> Any:
     """Load latest versioned regressor model."""
     return _load_latest("rf_regressor_*_v*.pkl", "regressor")
+
+
+def load_latest_pest_outbreak_classifier() -> Any:
+    """Load latest pest-outbreak classifier model."""
+    return _load_latest("rf_classifier_outbreak_next_7d_v*.pkl", "pest outbreak classifier")

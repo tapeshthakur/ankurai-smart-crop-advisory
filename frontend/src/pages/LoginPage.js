@@ -36,7 +36,7 @@ function LoginPage() {
   return (
     <main className="mx-auto flex min-h-[82vh] w-full max-w-7xl items-center px-4 py-10 sm:px-6 lg:px-8">
       <section className="grid w-full gap-6 lg:grid-cols-[0.95fr,1.05fr]">
-        <div className="surface-card-highlight p-8 lg:p-10">
+        <div className="auth-intro surface-card-highlight p-5 sm:p-8 lg:p-10">
           <span className="section-badge">{t("login.badge")}</span>
           <h1 className="mt-5 text-4xl font-bold leading-tight text-text-heading">{t("login.title")}</h1>
           <p className="mt-4 max-w-xl text-base leading-8 text-text-muted">{t("login.subtitle")}</p>
@@ -53,7 +53,7 @@ function LoginPage() {
           </div>
         </div>
 
-        <section className="surface-card p-8 lg:p-10">
+        <section className="surface-card p-5 sm:p-8 lg:p-10">
           <div className="max-w-xl">
             <span className="section-badge">{t("login.formBadge")}</span>
             <h2 className="mt-5 text-3xl font-semibold text-text-heading">{t("login.title")}</h2>

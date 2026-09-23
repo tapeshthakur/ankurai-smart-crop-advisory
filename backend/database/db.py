@@ -104,6 +104,88 @@ def init_db() -> None:
         )
 
         _migrate_predictions_table(conn)
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS farms (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                name TEXT NOT NULL,
+                location TEXT,
+                latitude REAL,
+                longitude REAL,
+                area REAL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            );
+            CREATE TABLE IF NOT EXISTS fields (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                farm_id INTEGER NOT NULL,
+                user_id INTEGER NOT NULL,
+                name TEXT NOT NULL,
+                crop TEXT,
+                variety TEXT,
+                planting_date TEXT,
+                expected_harvest_date TEXT,
+                season TEXT,
+                status TEXT NOT NULL DEFAULT 'active',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY (farm_id) REFERENCES farms(id) ON DELETE CASCADE,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            );
+            CREATE TABLE IF NOT EXISTS farm_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                farm_id INTEGER NOT NULL,
+                field_id INTEGER,
+                event_type TEXT NOT NULL,
+                event_date TEXT NOT NULL,
+                crop TEXT,
+                title TEXT NOT NULL,
+                description TEXT,
+                source TEXT,
+                metadata_json TEXT NOT NULL DEFAULT '{}',
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+                FOREIGN KEY (farm_id) REFERENCES farms(id) ON DELETE CASCADE
+            );
+            CREATE TABLE IF NOT EXISTS interventions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                farm_id INTEGER NOT NULL,
+                field_id INTEGER,
+                recommendation_event_id INTEGER,
+                intervention_type TEXT NOT NULL,
+                description TEXT NOT NULL,
+                event_date TEXT NOT NULL,
+                product TEXT,
+                dosage TEXT,
+                notes TEXT,
+                created_at TEXT NOT NULL,
+                crop TEXT,
+                problem TEXT,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+                FOREIGN KEY (farm_id) REFERENCES farms(id) ON DELETE CASCADE
+            );
+            CREATE TABLE IF NOT EXISTS outcomes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                intervention_id INTEGER NOT NULL,
+                outcome_date TEXT NOT NULL,
+                status TEXT NOT NULL,
+                notes TEXT,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+                FOREIGN KEY (intervention_id) REFERENCES interventions(id) ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS idx_farms_user ON farms(user_id);
+            CREATE INDEX IF NOT EXISTS idx_fields_farm ON fields(farm_id);
+            CREATE INDEX IF NOT EXISTS idx_events_farm_date ON farm_events(farm_id, event_date DESC);
+            CREATE INDEX IF NOT EXISTS idx_interventions_farm ON interventions(farm_id);
+            CREATE INDEX IF NOT EXISTS idx_outcomes_intervention ON outcomes(intervention_id);
+            """
+        )
         conn.commit()
 
 

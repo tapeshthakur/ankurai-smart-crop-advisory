@@ -4,7 +4,8 @@ const TOKEN_KEY = "smart_crop_token";
 const USER_KEY = "smart_crop_user";
 
 const api = axios.create({
-  baseURL: process.env.REACT_APP_API_BASE_URL || "http://localhost:5000",
+  // Empty means same-origin; CRA proxies /api requests to the local Flask server in development.
+  baseURL: process.env.REACT_APP_API_BASE_URL || "",
   timeout: 10000,
   headers: {
     "Content-Type": "application/json",
