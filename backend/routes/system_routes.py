@@ -12,6 +12,7 @@ from database.db import (
     get_prediction_count,
     get_recent_predictions,
     get_recent_predictions_for_user,
+    get_usage_analytics,
     get_user_count,
 )
 from utils.auth import role_required
@@ -147,3 +148,12 @@ def admin_stats():
         return jsonify({"total_predictions": get_prediction_count(), "user_count": get_user_count()}), 200
     except Exception:
         return jsonify({"error": "Failed to fetch admin stats."}), 500
+
+
+@system_bp.get("/api/admin/usage")
+@role_required("admin")
+def admin_usage():
+    try:
+        return jsonify(get_usage_analytics()), 200
+    except Exception:
+        return jsonify({"error": "Failed to fetch aggregate usage analytics."}), 500

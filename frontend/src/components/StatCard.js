@@ -10,10 +10,10 @@ function StatCard({ title, value, subtitle, accent = "primary", align = "left" }
 
   return (
     <div className="metric-panel">
-      <div className={align === "right" ? "text-right" : ""}>
-        <p className={`text-[11px] font-semibold uppercase tracking-[0.16em] ${titleTone[accent] || titleTone.primary}`}>{title}</p>
-        <p className="mt-2 text-2xl font-bold text-text-heading sm:text-[1.7rem]">{value}</p>
-        {subtitle ? <p className="mt-1 text-sm leading-5 text-text-muted">{subtitle}</p> : null}
+      <div className={`${align === "right" ? "text-right" : ""} flex h-full flex-col`}>
+        <p className={`text-xs font-semibold ${titleTone[accent] || titleTone.primary}`}>{title}</p>
+        <p className="mt-2 break-words text-xl font-semibold leading-tight tabular-nums text-text-heading">{value}</p>
+        {subtitle ? <p className="mt-auto pt-1 text-xs leading-5 text-text-muted">{subtitle}</p> : null}
       </div>
     </div>
   );

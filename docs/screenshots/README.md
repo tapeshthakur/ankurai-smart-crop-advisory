@@ -1,11 +1,13 @@
-# Screenshots
+# Product Screenshots
 
-Export final GitHub screenshots into this folder.
+README images use feature-first names that describe both the screen and, where relevant, the viewport or demo data:
 
-Recommended files:
+- `ankurai-homepage-desktop.png`
+- `ankurai-sign-in-desktop.png`
+- `ankurai-sign-in-mobile.png`
+- `ankurai-crop-advisory-desktop.png`
+- `ankurai-crop-advisory-mobile.png`
+- `ankurai-market-schemes-desktop-demo.png`
+- `ankurai-market-prices-mobile-demo.png`
 
-- `farmer-crop-prediction.png`
-- `low-confidence-crop-warning.png`
-- `planning-soil-care.png`
-- `leaf-disease-prediction.png`
-- `admin-model-metrics.png`
+Regenerate the set from `frontend/` with `npm run screenshots`. Captures use a demo farmer session and synthetic market records for consistent visuals. They are not live mandi data. Never publish screenshots containing real account details or farmer records.

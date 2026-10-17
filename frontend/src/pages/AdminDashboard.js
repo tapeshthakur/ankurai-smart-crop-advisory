@@ -13,6 +13,8 @@ import api from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import LoadingSkeleton from "../components/LoadingSkeleton";
 import LoadingSpinner from "../components/LoadingSpinner";
+import EmptyState from "../components/EmptyState";
+import { ChartNoAxesCombined } from "lucide-react";
 import MetricCard from "../components/MetricCard";
 import Sidebar from "../components/Sidebar";
 import { useLanguage } from "../i18n/LanguageContext";
@@ -98,6 +100,7 @@ function AdminDashboard() {
   const [stats, setStats] = useState({ total_predictions: 0, user_count: 0 });
   const [modelInfo, setModelInfo] = useState(null);
   const [predictions, setPredictions] = useState([]);
+  const [usage, setUsage] = useState({ days: [], active_users_7d: 0, active_users_30d: 0, crop_usage_30d: 0, irrigation_usage_30d: 0 });
   const [activeAdminTab, setActiveAdminTab] = useState("crop");
 
   useEffect(() => {
@@ -106,15 +109,17 @@ function AdminDashboard() {
         setLoading(true);
         setError("");
 
-        const [statsRes, modelRes, predictionsRes] = await Promise.all([
+        const [statsRes, modelRes, predictionsRes, usageRes] = await Promise.all([
           api.get("/api/admin/stats"),
           api.get("/api/model-info"),
           api.get("/api/predictions"),
+          api.get("/api/admin/usage"),
         ]);
 
         setStats(statsRes.data || { total_predictions: 0, user_count: 0 });
         setModelInfo(modelRes.data || null);
         setPredictions(predictionsRes.data.predictions || []);
+        setUsage(usageRes.data || { days: [], active_users_7d: 0, active_users_30d: 0, crop_usage_30d: 0, irrigation_usage_30d: 0 });
       } catch (err) {
         setError(err.response?.data?.error || t("admin.failed"));
       } finally {
@@ -134,10 +139,11 @@ function AdminDashboard() {
   const combinedPredictions = useMemo(() => mergePredictionHistory(predictions), [predictions]);
   const adminTabs = useMemo(
     () => [
-      { id: "crop", eyebrow: "Crop", label: "Crop Advisory" },
-      { id: "disease", eyebrow: "Leaf", label: "Leaf Detection" },
+      { id: "crop", eyebrow: t("admin.crop", "Crop"), label: t("admin.cropAdvisoryTab", "Crop Advisory") },
+      { id: "disease", eyebrow: t("admin.leafTab", "Leaf"), label: t("admin.leafDetectionTab", "Leaf Detection") },
+      { id: "usage", eyebrow: t("admin.usageTab"), label: t("admin.usageTitle") },
     ],
-    []
+    [t]
   );
 
   const metricData = useMemo(() => {
@@ -200,30 +206,21 @@ function AdminDashboard() {
   );
 
   const metricInsights = useMemo(() => {
-    const formatted = [
+    return [
       { key: "accuracy", label: t("admin.accuracy"), value: metricData.accuracy, better: "higher" },
       { key: "f1", label: t("admin.f1"), value: metricData.f1, better: "higher" },
       { key: "mae", label: t("admin.mae"), value: metricData.mae, better: "lower" },
       { key: "r2", label: t("admin.r2"), value: metricData.r2, better: "higher" },
     ];
-    const higherMetrics = formatted.filter((item) => item.better === "higher");
-    const bestMetric = [...higherMetrics].sort((a, b) => b.value - a.value)[0] || formatted[0];
-    const reviewMetric = [...formatted].sort((a, b) => {
-      const left = a.better === "lower" ? a.value : 1 - a.value;
-      const right = b.better === "lower" ? b.value : 1 - b.value;
-      return right - left;
-    })[0] || formatted[0];
-
-    return { formatted, bestMetric, reviewMetric };
   }, [metricData, t]);
 
   const barData = {
-    labels: [t("admin.accuracy"), t("admin.f1"), t("admin.mae"), t("admin.r2")],
+    labels: [t("admin.accuracy"), t("admin.f1")],
     datasets: [
       {
         label: t("admin.modelMetrics"),
-        data: [metricData.accuracy, metricData.f1, metricData.mae, metricData.r2],
-        backgroundColor: ["#2F5233", "#6F9172", "#C89B3C", "#E0B96D"],
+        data: [metricData.accuracy, metricData.f1],
+        backgroundColor: ["#2F5233", "#6F9172"],
         borderRadius: 14,
         borderSkipped: false,
         maxBarThickness: 48,
@@ -235,9 +232,10 @@ function AdminDashboard() {
     labels: cropSummary.labels.map((label) => tv("crops", label)),
     datasets: [
       {
+        label: t("admin.cropCountSeries"),
         data: cropSummary.values,
         backgroundColor: ["#2F5233", "#4F704F", "#91B394", "#C89B3C", "#E0B96D", "#8F6E24"],
-        borderColor: "#FFFDF8",
+        borderColor: "#FFFFFF",
         borderWidth: 3,
         hoverOffset: 8,
       },
@@ -255,49 +253,61 @@ function AdminDashboard() {
 
   const dateLocale = language === "mr" ? "mr-IN" : language === "hi" ? "hi-IN" : "en-IN";
 
+  const usageChartData = {
+    labels: usage.days.map((item) => new Date(`${item.day}T00:00:00`).toLocaleDateString(dateLocale, { day: "numeric", month: "short" })),
+    datasets: [
+      { label: t("admin.activeUsersSeries"), data: usage.days.map((item) => item.active_users), backgroundColor: "#2F5233", borderRadius: 3, maxBarThickness: 18 },
+      { label: t("admin.cropUsageSeries"), data: usage.days.map((item) => item.crop_usage), backgroundColor: "#C89B3C", borderRadius: 3, maxBarThickness: 18 },
+      { label: t("admin.irrigationUsageSeries"), data: usage.days.map((item) => item.irrigation_usage), backgroundColor: "#6F9172", borderRadius: 3, maxBarThickness: 18 },
+    ],
+  };
+
   const chartOptions = {
     responsive: true,
     plugins: {
       legend: {
         labels: {
-          color: "#2A2A26",
-          boxWidth: 14,
+          color: "#445248",
+          boxWidth: 12,
           usePointStyle: true,
           pointStyle: "circle",
-          padding: 18,
+          padding: 12,
+          font: { size: 11, weight: 600 },
         },
       },
       tooltip: {
         backgroundColor: "#1F3A22",
         borderColor: "rgba(200, 155, 60, 0.35)",
         borderWidth: 1,
-        titleColor: "#FAF7F0",
-        bodyColor: "#F5F1E8",
+        titleColor: "#F5F7F4",
+        bodyColor: "#EEF2ED",
       },
     },
     scales: {
       x: {
-        ticks: { color: "#6B665C" },
+        title: { display: true, text: t("admin.dateAxis"), color: "#5F6C61" },
+        ticks: { color: "#5F6C61", maxRotation: 0, autoSkip: true, maxTicksLimit: 6, font: { size: 11 } },
         grid: { display: false },
       },
       y: {
-        ticks: { color: "#6B665C" },
-        grid: { display: false },
+        title: { display: true, text: t("admin.countAxis"), color: "#5F6C61" },
+        ticks: { color: "#5F6C61", maxTicksLimit: 5, font: { size: 11 } },
+        grid: { color: "rgba(95, 108, 97, 0.12)", drawBorder: false },
       },
     },
   };
 
   return (
     <main className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-      <div className="grid gap-6 lg:grid-cols-[285px,1fr]">
+      <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-5 sm:gap-6 lg:grid-cols-[285px,minmax(0,1fr)]">
         <Sidebar role={user?.role} moduleItems={adminTabs} activeModule={activeAdminTab} onModuleChange={setActiveAdminTab} />
 
-        <section className="space-y-6">
+        <section className="min-w-0 space-y-5 sm:space-y-6">
           <div className="app-shell ambient-grid">
             <div className="relative z-10 grid gap-6 xl:grid-cols-[1.2fr,0.8fr] xl:items-end">
               <div>
                 <span className="section-badge">{t("admin.heroBadge")}</span>
-                <h1 className="mt-4 text-4xl font-bold leading-tight text-text-heading sm:text-5xl">{t("admin.title")}</h1>
+                <h1 className="mt-3 text-2xl font-bold leading-tight text-text-heading sm:text-3xl">{t("admin.title")}</h1>
                 <p className="mt-4 max-w-2xl text-base leading-7 text-text-muted">{t("admin.subtitle")}</p>
                 <div className="mt-6 flex flex-wrap gap-3 text-sm">
                   <span className="rounded-full border border-surface-border bg-surface-card px-4 py-2 text-text-muted">{t("admin.currentUser")}: {user?.name}</span>
@@ -308,8 +318,8 @@ function AdminDashboard() {
               <div className="grid gap-4 sm:grid-cols-2">
                 <MetricCard title={t("admin.totalPredictions")} value={stats.total_predictions || 0} subtitle={t("admin.totalPredictionsSubtitle")} accent="primary" />
                 <MetricCard title={t("admin.userCount")} value={stats.user_count || 0} subtitle={t("admin.userCountSubtitle")} accent="success" />
-                <MetricCard title={t("admin.accuracy")} value={metricData.accuracy.toFixed(4)} subtitle={t("admin.accuracySubtitle")} accent="accent" />
-                <MetricCard title={t("admin.f1")} value={metricData.f1.toFixed(4)} subtitle={t("admin.f1Subtitle")} accent="primary" />
+                <MetricCard title={t("admin.accuracy")} value={formatPercent(metricData.accuracy)} subtitle={t("admin.accuracySubtitle")} accent="accent" />
+                <MetricCard title={t("admin.f1")} value={formatPercent(metricData.f1)} subtitle={t("admin.f1Subtitle")} accent="primary" />
               </div>
             </div>
           </div>
@@ -317,8 +327,8 @@ function AdminDashboard() {
           {loading ? (
             <div className="space-y-6">
               <LoadingSpinner label={t("admin.loading")} />
-              <LoadingSkeleton cards={4} rows={2} className="sm:grid-cols-2 lg:grid-cols-4" />
-              <LoadingSkeleton cards={2} rows={4} className="xl:grid-cols-2" />
+              <LoadingSkeleton cards={4} rows={2} label={t("admin.loading")} className="sm:grid-cols-2 lg:grid-cols-4" />
+              <LoadingSkeleton cards={2} rows={4} label={t("admin.loading")} className="xl:grid-cols-2" />
             </div>
           ) : null}
           {error ? <p className="rounded-2xl border border-danger-100 bg-danger-50 px-4 py-3 text-sm text-danger-700">{error}</p> : null}
@@ -334,7 +344,7 @@ function AdminDashboard() {
               ) : null}
 
               {activeAdminTab === "disease" && diseaseSummary.accuracy ? (
-                <div className="chart-shell">
+      <div className="chart-shell">
                   <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
                     <div>
                       <span className="section-badge">Disease CNN</span>
@@ -493,6 +503,26 @@ function AdminDashboard() {
                 </div>
               ) : null}
 
+              {activeAdminTab === "usage" ? (
+                <div className="space-y-6">
+                  <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                    <MetricCard title={t("admin.activeUsers7d")} value={usage.active_users_7d.toLocaleString(dateLocale)} subtitle={t("admin.usageSubtitle")} accent="primary" />
+                    <MetricCard title={t("admin.activeUsers30d")} value={usage.active_users_30d.toLocaleString(dateLocale)} subtitle={t("admin.usageSubtitle")} accent="success" />
+                    <MetricCard title={t("admin.cropUsage30d")} value={usage.crop_usage_30d.toLocaleString(dateLocale)} subtitle={t("admin.cropUsageSeries")} accent="accent" />
+                    <MetricCard title={t("admin.irrigationUsage30d")} value={usage.irrigation_usage_30d.toLocaleString(dateLocale)} subtitle={t("admin.irrigationUsageSeries")} accent="primary" />
+                  </div>
+                  <div className="chart-shell">
+                    <span className="section-badge">{t("admin.usageTab")}</span>
+                    <h2 className="mt-3 text-2xl font-semibold text-text-heading">{t("admin.dailyUsage")}</h2>
+                    {usage.days.length ? <div className="mt-5 h-64"><Bar data={usageChartData} options={{ ...chartOptions, maintainAspectRatio: false }} role="img" aria-label={t("admin.dailyUsage")} /></div> : <EmptyState Icon={ChartNoAxesCombined} title={t("admin.noPredictionData")} description={t("admin.usageEmptyDesc")} action={<button type="button" onClick={() => setActiveAdminTab("crop")} className="theme-button-ghost px-4 py-2.5">{t("admin.cropAdvisoryTab")}</button>} />}
+                  </div>
+                  <aside className="border-l-2 border-accent-300 pl-4">
+                    <h3 className="text-sm font-semibold text-text-heading">{t("admin.usageCoverage")}</h3>
+                    <p className="mt-1 max-w-3xl text-sm leading-6 text-text-muted">{t("admin.usageCoverageDesc")}</p>
+                  </aside>
+                </div>
+              ) : null}
+
               {activeAdminTab === "crop" ? (
               <div className="grid gap-6 xl:grid-cols-[1.1fr,0.9fr]">
                 <div className="chart-shell">
@@ -503,15 +533,32 @@ function AdminDashboard() {
                     </div>
                     <p className="text-sm text-text-muted">{t("admin.modelOverviewDesc")}</p>
                   </div>
-                  <Bar data={barData} options={chartOptions} />
-                  <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                    {metricInsights.formatted.map((metric) => (
+                  <div className="h-56"><Bar data={barData} options={{ ...chartOptions, maintainAspectRatio: false, scales: { ...chartOptions.scales, x: { ...chartOptions.scales.x, title: { display: false } }, y: { ...chartOptions.scales.y, title: { display: true, text: t("admin.scoreAxis"), color: "#5F6C61" }, min: 0, max: 1, ticks: { ...chartOptions.scales.y.ticks, callback: (value) => `${Number(value) * 100}%` } } } }} role="img" aria-label={`${t("admin.classifierScores")}: ${barData.labels.join(", ")}`} /></div>
+                  <table className="sr-only">
+                    <caption>{t("admin.classifierScores")}</caption>
+                    <thead><tr><th scope="col">{t("admin.metricName")}</th><th scope="col">{t("admin.metricValue")}</th></tr></thead>
+                    <tbody>{metricInsights.filter((metric) => metric.key === "accuracy" || metric.key === "f1").map((metric) => <tr key={metric.key}><th scope="row">{metric.label}</th><td>{formatPercent(metric.value)}</td></tr>)}</tbody>
+                  </table>
+                  <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                    {metricInsights.filter((metric) => metric.key === "accuracy" || metric.key === "f1").map((metric) => (
                       <div key={metric.key} className="chart-legend-card">
                         <p className="text-[11px] uppercase tracking-[0.2em] text-text-subtle">{metric.label}</p>
-                        <p className="mt-2 text-xl font-semibold text-text-heading">{metric.value.toFixed(4)}</p>
+                        <p className="mt-2 text-xl font-semibold text-text-heading">{formatPercent(metric.value)}</p>
                         <p className="mt-1 text-xs text-text-subtle">{metric.better === "lower" ? t("admin.lowerBetter") : t("admin.higherBetter")}</p>
                       </div>
                     ))}
+                  </div>
+                  <div className="mt-5 border-t border-surface-border pt-4">
+                    <h3 className="text-sm font-semibold text-text-heading">{t("admin.irrigationRegression")}</h3>
+                    <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                      {metricInsights.filter((metric) => metric.key === "mae" || metric.key === "r2").map((metric) => (
+                        <div key={metric.key} className="chart-legend-card">
+                          <p className="text-[11px] uppercase tracking-[0.2em] text-text-subtle">{metric.label}</p>
+                          <p className="mt-2 text-xl font-semibold text-text-heading">{metric.value.toFixed(4)}</p>
+                          <p className="mt-1 text-xs text-text-subtle">{metric.better === "lower" ? t("admin.lowerBetter") : t("admin.higherBetter")}</p>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 </div>
 
@@ -526,19 +573,22 @@ function AdminDashboard() {
 
                   {cropSummary.labels.length ? (
                     <>
-                      <div className="mx-auto max-w-[360px]">
+                      <div className="relative mx-auto h-64 w-full min-w-0 max-w-[360px] sm:h-72">
                         <Doughnut
                           data={doughnutData}
+                          role="img"
+                          aria-label={`${t("admin.cropShare")}: ${doughnutData.labels.map((label, index) => `${label}: ${cropSummary.values[index]}`).join("; ")}`}
                           options={{
                             cutout: "62%",
                             plugins: {
                               legend: {
                                 labels: {
-                                  color: "#2A2A26",
-                                  boxWidth: 14,
+                                  color: "#445248",
+                                  boxWidth: 12,
                                   usePointStyle: true,
                                   pointStyle: "circle",
-                                  padding: 16,
+                                  padding: 10,
+                                  font: { size: 11, weight: 600 },
                                 },
                               },
                             },
@@ -549,18 +599,6 @@ function AdminDashboard() {
                         <p className="text-[11px] uppercase tracking-[0.22em] text-accent-700">{t("admin.topRecommendation")}</p>
                         <p className="mt-2 text-xl font-semibold capitalize text-text-heading">{tv("crops", cropSummary.topCrop)}</p>
                         <p className="mt-2 text-sm text-text-muted">{t("admin.distributionLead", undefined, { count: cropSummary.topCount })}</p>
-                      </div>
-                      <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                        <div className="chart-legend-card">
-                          <p className="text-[11px] uppercase tracking-[0.2em] text-accent-700">{t("admin.strongestMetric")}</p>
-                          <p className="mt-2 text-lg font-semibold text-text-heading">{metricInsights.bestMetric.label}</p>
-                          <p className="mt-1 text-sm text-text-muted">{metricInsights.bestMetric.value.toFixed(4)}</p>
-                        </div>
-                        <div className="chart-legend-card">
-                          <p className="text-[11px] uppercase tracking-[0.2em] text-accent-700">{t("admin.reviewMetric")}</p>
-                          <p className="mt-2 text-lg font-semibold text-text-heading">{metricInsights.reviewMetric.label}</p>
-                          <p className="mt-1 text-sm text-text-muted">{t("admin.improvementScope")}</p>
-                        </div>
                       </div>
                     </>
                   ) : (

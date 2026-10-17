@@ -1,8 +1,9 @@
 import React from "react";
 import { useLanguage } from "../i18n/LanguageContext";
+import { soilDataText } from "../i18n/soilTranslations";
 
 function SoilRestorationCard({ plan, onStart }) {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   if (!plan) {
     return (
       <section className="surface-card-highlight p-6">
@@ -25,23 +26,23 @@ function SoilRestorationCard({ plan, onStart }) {
       <div className="mt-5 border-t border-surface-border pt-5">
           <div className="rounded-xl border border-warning-100 bg-warning-50 p-4">
             <p className="text-xs font-semibold uppercase tracking-[0.14em] text-warning-700">{t("soil.priorities", "Current priorities")}</p>
-            <p className="mt-2 text-sm leading-6 text-text-heading">{(plan.priority_issues || []).join(", ")}</p>
+            <p className="mt-2 text-sm leading-6 text-text-heading">{(plan.priority_issues || []).map((issue) => soilDataText(language, issue)).join(", ")}</p>
           </div>
           <div className="mt-4 grid gap-3 lg:grid-cols-3">
             {(plan.plan || []).map((year) => (
               <article key={year.year} className="surface-card-soft p-4">
                 <p className="text-xs font-semibold uppercase tracking-[0.14em] text-accent-700">{t("soil.year", "Year")} {year.year}</p>
-                <h4 className="mt-2 text-base font-semibold text-text-heading">{year.focus}</h4>
+                <h4 className="mt-2 text-base font-semibold text-text-heading">{soilDataText(language, year.focus)}</h4>
                 <p className="mt-3 text-sm font-medium text-text-heading">{t("soil.rotation", "Rotation")}</p>
-                <p className="mt-1 text-sm leading-6 text-text-muted">{year.rotation}</p>
+                <p className="mt-1 text-sm leading-6 text-text-muted">{soilDataText(language, year.rotation)}</p>
                 <p className="mt-3 text-sm font-medium text-text-heading">{t("soil.coverCrop", "Cover crop")}</p>
-                <p className="mt-1 text-sm leading-6 text-text-muted">{year.cover_crop}</p>
+                <p className="mt-1 text-sm leading-6 text-text-muted">{soilDataText(language, year.cover_crop)}</p>
                 <p className="mt-3 text-sm font-medium text-text-heading">{t("soil.microbial", "Microbial support")}</p>
-                <p className="mt-1 text-sm leading-6 text-text-muted">{year.microbial_support}</p>
+                <p className="mt-1 text-sm leading-6 text-text-muted">{soilDataText(language, year.microbial_support)}</p>
               </article>
             ))}
           </div>
-          <p className="mt-4 text-xs leading-5 text-text-subtle">{(plan.limitations || []).join(" ")}</p>
+          <p className="mt-4 text-xs leading-5 text-text-subtle">{(plan.limitations || []).map((item) => soilDataText(language, item)).join(" ")}</p>
       </div>
     </section>
   );

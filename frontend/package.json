@@ -8,6 +8,7 @@
     "chart.js": "^4.5.1",
     "html2canvas": "^1.4.1",
     "jspdf": "^4.2.1",
+    "lucide-react": "^1.48.0",
     "react": "^18.3.1",
     "react-chartjs-2": "^5.3.1",
     "react-dom": "^18.3.1",
@@ -20,6 +21,8 @@
     "start": "react-scripts start",
     "build": "react-scripts build",
     "test": "react-scripts test",
+    "test:e2e": "playwright test",
+    "screenshots": "playwright test -c playwright.screenshots.config.js",
     "eject": "react-scripts eject"
   },
   "browserslist": {
@@ -35,6 +38,7 @@
     ]
   },
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
     "autoprefixer": "^10.4.20",
     "postcss": "^8.4.49",
     "tailwindcss": "^3.4.17"

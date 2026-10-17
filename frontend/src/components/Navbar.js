@@ -5,6 +5,7 @@ import { useLanguage } from "../i18n/LanguageContext";
 import Button from "./Button";
 import ThemedSelect from "./ThemedSelect";
 import InstallAppButton from "./InstallAppButton";
+import TranslationFeedbackButton from "./TranslationFeedbackButton";
 import logo from "../assets/ankurai-navbar.png";
 
 function Navbar() {
@@ -21,21 +22,22 @@ function Navbar() {
   return (
     <header className="sticky top-0 z-40 border-b border-surface-border bg-background/92 backdrop-blur-xl">
       <div className="mx-auto flex w-full max-w-7xl items-center justify-between gap-2 px-3 py-2 sm:gap-4 sm:px-6 sm:py-3 lg:px-8">
-        <Link to="/" className="group flex shrink-0 items-center" aria-label="AnkurAI home">
-          <img src={logo} alt="AnkurAI" className="h-14 w-32 object-contain sm:h-16 sm:w-40" />
+        <Link to="/" className="navbar-brand group flex shrink-0 items-center" aria-label={t("nav.home")}>
+          <img src={logo} alt="AnkurAI" className="h-10 w-24 object-contain sm:h-16 sm:w-40" />
         </Link>
 
-        <div className="flex min-w-0 items-center gap-1.5 sm:gap-3">
+        <div className="navbar-actions flex min-w-0 items-center gap-1.5 sm:gap-3">
           <div className="hidden items-center gap-3 rounded-2xl border border-surface-border bg-surface-card px-3 py-2 shadow-card md:flex">
             <label className="text-[11px] font-semibold uppercase tracking-[0.18em] text-text-muted">{t("nav.language")}</label>
-            <ThemedSelect value={language} onChange={setLanguage} options={languageOptions} className="min-w-[138px]" />
+            <ThemedSelect label={t("nav.language")} value={language} onChange={setLanguage} options={languageOptions} className="min-w-[138px]" />
           </div>
 
           <div className="md:hidden">
-            <ThemedSelect value={language} onChange={setLanguage} options={languageOptions} className="min-w-[118px]" />
+              <ThemedSelect label={t("nav.language")} value={language} onChange={setLanguage} options={languageOptions} className="navbar-language-select min-w-[118px]" />
           </div>
 
           <InstallAppButton />
+          {isAuthenticated ? <TranslationFeedbackButton /> : null}
 
           {!isAuthenticated ? (
             <div className="flex items-center gap-2">
@@ -69,11 +71,11 @@ function Navbar() {
 
           {isAuthenticated ? (
             <div className="relative sm:hidden">
-              <button type="button" onClick={() => setAccountOpen((open) => !open)} className="theme-button-ghost touch-target px-3 py-2 text-xs" aria-expanded={accountOpen}>
-                Account
+              <button type="button" onClick={() => setAccountOpen((open) => !open)} className="navbar-account-button theme-button-ghost touch-target px-3 py-2 text-xs" aria-expanded={accountOpen} aria-controls={accountOpen ? "mobile-account-menu" : undefined}>
+                {t("nav.account")}
               </button>
               {accountOpen ? (
-                <div className="absolute right-0 top-[calc(100%+0.5rem)] z-50 w-44 rounded-2xl border border-surface-border bg-white p-2 shadow-lift">
+                <div id="mobile-account-menu" className="absolute right-0 top-[calc(100%+0.5rem)] z-50 w-44 rounded-md border border-surface-border bg-white p-2 shadow-lift">
                   <NavLink to="/dashboard" onClick={() => setAccountOpen(false)} className="block rounded-xl px-3 py-3 text-sm font-semibold text-text-heading hover:bg-primary-50">
                     {t("nav.dashboard")}
                   </NavLink>

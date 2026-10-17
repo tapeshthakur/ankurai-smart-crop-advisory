@@ -40,15 +40,29 @@ def test_attribution_uses_same_crop_problem_and_minimum_samples(farm_db):
         farm_service.record_outcome(user_id, item["intervention_id"], "improved")
     for _ in range(3):
         item = farm_service.create_recommendation(user_id, farm_id, None, "tomato", "early blight", f"Treatment B {_}")
-        with db.get_connection() as conn:
-            conn.execute("UPDATE interventions SET intervention_type='alternative' WHERE id=?", (item["intervention_id"],))
-            conn.commit()
-        farm_service.acknowledge_intervention(user_id, item["intervention_id"])
+        farm_service.acknowledge_intervention(user_id, item["intervention_id"], practice_group="usual_practice")
         farm_service.record_outcome(user_id, item["intervention_id"], "worsened")
-    rationale = farm_service.build_rationale(user_id, farm_id, None, "tomato", "early blight", "applied")
+    rationale = farm_service.build_rationale(user_id, farm_id, None, "tomato", "early blight", "recommended")
     assert rationale["evidence_level"] == "tier_2"
     assert rationale["evidence"]["observed_difference"] == 1.0
     assert "causation" in " ".join(rationale["limitations"])
+    assert rationale["evidence"]["intervention_cases"] == 3
+    assert rationale["evidence"]["comparison_cases"] == 3
+
+
+def test_action_status_does_not_change_practice_group(farm_db):
+    user_id, farm_id = farm_db
+    item = farm_service.create_recommendation(user_id, farm_id, None, "tomato", "early blight", "Treatment")
+    farm_service.acknowledge_intervention(user_id, item["intervention_id"], practice_group="usual_practice")
+    with db.get_connection() as conn:
+        row = conn.execute("SELECT intervention_type, action_status, practice_group FROM interventions WHERE id=?", (item["intervention_id"],)).fetchone()
+    assert tuple(row) == ("applied", "applied", "usual_practice")
+    farm_service.record_outcome(user_id, item["intervention_id"], "improved")
+    rationale = farm_service.build_rationale(user_id, farm_id, None, "tomato", "early blight")
+    assert rationale["evidence"]["comparison_cases"] == 1
+    assert rationale["evidence"]["intervention_cases"] == 0
+    assert rationale["evidence"]["comparison_improvement_rate"] is None
+    assert rationale["reason_code"] == "collecting"
 
 
 def test_attribution_excludes_mismatched_context_and_unknown(farm_db):

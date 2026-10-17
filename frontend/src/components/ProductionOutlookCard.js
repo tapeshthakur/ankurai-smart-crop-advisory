@@ -1,8 +1,10 @@
 import React from "react";
 import { useLanguage } from "../i18n/LanguageContext";
+import { soilDataText } from "../i18n/soilTranslations";
+import RiskBadge from "./RiskBadge";
 
 function ProductionOutlookCard({ outlook }) {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   if (!outlook) return null;
 
   const yieldEstimate = outlook.yield_estimate || {};
@@ -34,8 +36,8 @@ function ProductionOutlookCard({ outlook }) {
         </div>
         <div className="surface-card-soft p-4">
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-text-subtle">{t("production.pestRisk", "Pest scouting risk")}</p>
-          <p className="mt-2 text-xl font-semibold capitalize text-text-heading">{pestRisk.level || "-"}</p>
-          <p className="mt-2 text-xs leading-5 text-text-muted">{(pestRisk.likely_pests || []).join(", ") || "-"}</p>
+          <div className="mt-2"><RiskBadge level={pestRisk.level} /></div>
+          <p className="mt-2 text-xs leading-5 text-text-muted">{(pestRisk.likely_pests || []).map((pest) => soilDataText(language, pest)).join(", ") || "-"}</p>
         </div>
       </div>
 
@@ -43,13 +45,13 @@ function ProductionOutlookCard({ outlook }) {
         <div>
           <p className="text-sm font-semibold text-text-heading">{t("production.watch", "What to watch")}</p>
           <ul className="mt-2 space-y-1 text-sm leading-6 text-text-muted">
-            {(pestRisk.drivers || []).map((driver) => <li key={driver}>- {driver}</li>)}
-            {(yieldEstimate.constraints || []).map((constraint) => <li key={constraint}>- {constraint}</li>)}
+            {(pestRisk.drivers || []).map((driver) => <li key={driver}>- {soilDataText(language, driver)}</li>)}
+            {(yieldEstimate.constraints || []).map((constraint) => <li key={constraint}>- {soilDataText(language, constraint)}</li>)}
           </ul>
         </div>
         <div>
           <p className="text-sm font-semibold text-text-heading">{t("production.nextAction", "Next action")}</p>
-          <p className="mt-2 text-sm leading-6 text-text-muted">{pestRisk.recommended_action}</p>
+          <p className="mt-2 text-sm leading-6 text-text-muted">{soilDataText(language, pestRisk.recommended_action)}</p>
         </div>
       </div>
     </section>

@@ -16,6 +16,7 @@ tmp/
 
 # Testing cache
 .pytest_cache/
+frontend/test-results/
 
 # Large datasets
 backend/data/

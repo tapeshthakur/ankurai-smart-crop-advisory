@@ -1,20 +1,27 @@
 import React, { useEffect, useMemo, useState } from "react";
 import api from "../api/client";
+import { getFieldSnapshot, saveFieldSnapshot, savePendingTaskNote } from "../api/offlineFieldStore";
 import { useAuth } from "../auth/AuthContext";
 import AskAiAssistant from "../components/AskAiAssistant";
 import CropCard from "../components/CropCard";
 import DiseaseDetector from "../components/DiseaseDetector";
+import EmptyState from "../components/EmptyState";
 import LoadingSkeleton from "../components/LoadingSkeleton";
 import LoadingSpinner from "../components/LoadingSpinner";
 import MarketInsights from "../components/MarketInsights";
-import MetricCard from "../components/MetricCard";
+import FarmWorkspace from "../components/FarmWorkspace";
 import Sidebar from "../components/Sidebar";
 import MobileBottomNav from "../components/MobileBottomNav";
 import PestOutbreakCard from "../components/PestOutbreakCard";
-import RationaleCard from "../components/RationaleCard";
 import ProductionOutlookCard from "../components/ProductionOutlookCard";
 import SoilRestorationCard from "../components/SoilRestorationCard";
+import SoilPlanningWorkspace from "../components/SoilPlanningWorkspace";
+import FieldTimeline from "../components/FieldTimeline";
+import PredictionComparison from "../components/PredictionComparison";
+import WeatherSignals from "../components/WeatherSignals";
 import ThemedSelect from "../components/ThemedSelect";
+import FarmReportButton from "../components/FarmReportButton";
+import AlertsCenter from "../components/AlertsCenter";
 import { useLanguage } from "../i18n/LanguageContext";
 
 import riceImage from "../assets/crops/rice.jpg";
@@ -109,6 +116,13 @@ function daysAfterPlanting(plantingDate) {
   return clampNumber(diffDays, 1, 180);
 }
 
+function formatHistoryDate(value, language) {
+  const date = new Date(value || "");
+  if (Number.isNaN(date.getTime())) return value || "-";
+  const locale = language === "hi" ? "hi-IN" : language === "mr" ? "mr-IN" : "en-IN";
+  return date.toLocaleString(locale, { dateStyle: "medium", timeStyle: "short" });
+}
+
 function buildPestFallbackForecast(crop, advisory) {
   const pestRisk = advisory?.production_outlook?.pest_risk;
   if (!pestRisk) return null;
@@ -178,12 +192,13 @@ function mergePredictionHistory(rows) {
 
 function FarmerDashboard() {
   const { user } = useAuth();
-  const { t, tv } = useLanguage();
+  const { t, tv, language } = useLanguage();
   const [activeTab, setActiveTab] = useState("crop");
   const [selectedState, setSelectedState] = useState("Maharashtra");
   const [selectedSeason, setSelectedSeason] = useState("Auto");
   const [plantingDate, setPlantingDate] = useState("");
   const [liveWeather, setLiveWeather] = useState(null);
+  const [weatherForecast, setWeatherForecast] = useState(null);
   const [form, setForm] = useState({ N: "", P: "", K: "", temperature: "", humidity: "", ph: "", rainfall: "" });
   const [loading, setLoading] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(true);
@@ -197,19 +212,29 @@ function FarmerDashboard() {
   const [weatherLoading, setWeatherLoading] = useState(false);
   const [farmId, setFarmId] = useState("");
   const [fieldId, setFieldId] = useState("");
+  const [selectedField, setSelectedField] = useState(null);
+  const [soilTasks, setSoilTasks] = useState([]);
+  const [savedReminders, setSavedReminders] = useState({});
+  const [farmDueCount, setFarmDueCount] = useState(0);
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [dashboardCacheLoaded, setDashboardCacheLoaded] = useState(false);
+  const [hasOfflineSnapshot, setHasOfflineSnapshot] = useState(false);
+  const dashboardCacheKey = `dashboard:${user?.id || user?.email || "current"}`;
 
   const tabs = [
-    { id: "crop", label: t("farmer.cropTab"), eyebrow: t("farmer.cropEyebrow"), description: t("farmer.cropDesc") },
-    { id: "soil", label: t("farmer.soilTab", "Planning & Soil Care"), eyebrow: t("farmer.soilEyebrow", "Outlook + recovery plan"), description: t("farmer.soilDesc", "Review yield outlook, pest scouting, rotations, and long-term soil recovery.") },
-    { id: "disease", label: t("farmer.diseaseTab"), eyebrow: t("farmer.diseaseEyebrow"), description: t("farmer.diseaseDesc") },
-    { id: "market", label: t("farmer.marketTab"), eyebrow: t("farmer.marketEyebrow"), description: t("farmer.marketDesc") },
+    { id: "crop", label: t("farmer.cropTab"), mobileLabel: t("farmer.mobileCropTab", "Crop"), eyebrow: t("farmer.cropEyebrow"), description: t("farmer.cropDesc") },
+    { id: "soil", label: t("farmer.soilTab", "Planning & Soil Care"), mobileLabel: t("farmer.mobileSoilTab", "Soil"), eyebrow: t("farmer.soilEyebrow", "Outlook + recovery plan"), description: t("farmer.soilDesc", "Review yield outlook, pest scouting, rotations, and long-term soil recovery.") },
+    { id: "disease", label: t("farmer.diseaseTab"), mobileLabel: t("farmer.mobileDiseaseTab", "Disease"), eyebrow: t("farmer.diseaseEyebrow"), description: t("farmer.diseaseDesc") },
+    { id: "market", label: t("farmer.marketTab"), mobileLabel: t("farmer.mobileMarketTab", "Market"), eyebrow: t("farmer.marketEyebrow"), description: t("farmer.marketDesc") },
     {
       id: "ai",
       label: t("ai.tab", "Ask AI"),
-      eyebrow: t("ai.eyebrow", "Groq assistant"),
+      mobileLabel: t("ai.mobileTab", "AI"),
+      eyebrow: t("ai.eyebrow", "Farm assistant"),
       description: t("ai.description", "Ask follow-up questions about your crop, irrigation, disease, and market guidance."),
     },
-    { id: "history", label: t("farmer.historyTab"), eyebrow: t("farmer.historyEyebrow"), description: t("farmer.historyDesc") },
+    { id: "history", label: t("farmer.historyTab"), mobileLabel: t("farmer.mobileHistoryTab", "History"), eyebrow: t("farmer.historyEyebrow"), description: t("farmer.historyDesc") },
+    { id: "alerts", label: t("alerts.title"), mobileLabel: t("alerts.mobileLabel"), eyebrow: t("alerts.eyebrow"), description: t("alerts.subtitle") },
   ];
 
   const fetchHistory = async () => {
@@ -218,14 +243,100 @@ function FarmerDashboard() {
       const response = await api.get("/api/predictions");
       setPredictions(response.data.predictions || []);
     } catch (err) {
-      setError(err.response?.data?.error || t("farmer.historyFailed"));
+      const snapshot = await getFieldSnapshot(dashboardCacheKey).catch(() => null);
+      if (snapshot?.data?.predictions) {
+        setPredictions(snapshot.data.predictions);
+        setHasOfflineSnapshot(true);
+        if (!navigator.onLine) setError("");
+      } else {
+        setError(err.response?.data?.error || t("farmer.historyFailed"));
+      }
     } finally {
       setHistoryLoading(false);
     }
   };
 
+  const completeSoilTask = async (task) => {
+    try {
+      const response = await api.patch(`/api/soil-plan-tasks/${task.id}`, { status: "completed", notes: task.notes || "" });
+      setSoilTasks((current) => current.map((item) => item.id === task.id ? response.data.task : item));
+    } catch (err) {
+      if (!err.response || !navigator.onLine) {
+        await savePendingTaskNote(task.id, task.notes || "", "completed");
+        setSoilTasks((current) => current.map((item) => item.id === task.id ? { ...item, status: "completed" } : item));
+        return;
+      }
+      throw err;
+    }
+  };
+
+  const openTimelineItem = (destination) => {
+    if (destination === "crop") {
+      setActiveTab("crop");
+      return;
+    }
+    const targetId = destination === "pest" ? "pest-outbreak" : "soil-plan-workspace";
+    document.getElementById(targetId)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
   useEffect(() => {
     fetchHistory();
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    getFieldSnapshot(dashboardCacheKey).then((snapshot) => {
+      if (!active || !snapshot?.data) return;
+      setHasOfflineSnapshot(true);
+      if (!navigator.onLine) {
+        const cached = snapshot.data;
+        setForm(cached.form || { N: "", P: "", K: "", temperature: "", humidity: "", ph: "", rainfall: "" });
+        setResult(cached.result || null);
+        setAdvisory(cached.advisory || null);
+        setPestForecast(cached.pestForecast || null);
+        setPredictions(cached.predictions || []);
+        setWeatherForecast(cached.weatherForecast || null);
+        setSelectedState(cached.selectedState || "Maharashtra");
+        setSelectedSeason(cached.selectedSeason || "Auto");
+        setPlantingDate(cached.plantingDate || "");
+      }
+    }).finally(() => {
+      if (active) setDashboardCacheLoaded(true);
+    });
+    const updateConnection = () => setIsOnline(navigator.onLine);
+    window.addEventListener("online", updateConnection);
+    window.addEventListener("offline", updateConnection);
+    return () => {
+      active = false;
+      window.removeEventListener("online", updateConnection);
+      window.removeEventListener("offline", updateConnection);
+    };
+  }, [dashboardCacheKey]);
+
+  useEffect(() => {
+    if (!dashboardCacheLoaded) return;
+    saveFieldSnapshot(dashboardCacheKey, {
+      form, result, advisory, pestForecast, predictions, weatherForecast,
+      selectedState, selectedSeason, plantingDate,
+    }).then(() => setHasOfflineSnapshot(true)).catch(() => {});
+  }, [dashboardCacheKey, dashboardCacheLoaded, form, result, advisory, pestForecast, predictions, weatherForecast, selectedState, selectedSeason, plantingDate]);
+
+  useEffect(() => {
+    const syncReminders = () => {
+      try {
+        const stored = JSON.parse(localStorage.getItem("ankurai_field_reminders") || "{}");
+        setSavedReminders(stored && typeof stored === "object" && !Array.isArray(stored) ? stored : {});
+      } catch {
+        setSavedReminders({});
+      }
+    };
+    syncReminders();
+    window.addEventListener("ankurai-reminders-change", syncReminders);
+    window.addEventListener("storage", syncReminders);
+    return () => {
+      window.removeEventListener("ankurai-reminders-change", syncReminders);
+      window.removeEventListener("storage", syncReminders);
+    };
   }, []);
 
   const handleChange = (field, value) => {
@@ -259,17 +370,29 @@ function FarmerDashboard() {
     }
 
     setWeatherLoading(true);
+    setWeatherForecast(null);
     navigator.geolocation.getCurrentPosition(
       async (position) => {
         try {
           const { latitude, longitude } = position.coords;
           const response = await fetch(
-            `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,relative_humidity_2m,rain&timezone=auto`
+            `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,relative_humidity_2m,rain&daily=precipitation_probability_max,precipitation_sum,temperature_2m_max&forecast_days=7&timezone=auto`
           );
           if (!response.ok) {
             throw new Error("Weather service unavailable");
           }
           const data = await response.json();
+          const daily = data.daily || {};
+          setWeatherForecast({
+            source: "Open-Meteo",
+            fetched_at: new Date().toISOString(),
+            days: (daily.time || []).map((date, index) => ({
+              date,
+              precipitation_probability: daily.precipitation_probability_max?.[index],
+              precipitation_mm: daily.precipitation_sum?.[index],
+              temperature_max_c: daily.temperature_2m_max?.[index],
+            })),
+          });
           applyWeatherValues({
             temperature: Number(data.current?.temperature_2m || 0).toFixed(1),
             humidity: Number(data.current?.relative_humidity_2m || 0).toFixed(0),
@@ -424,43 +547,107 @@ function FarmerDashboard() {
     }),
     [advisory, combinedPredictions, form, latestCrop, liveWeather, pestForecast, result, selectedSeason, selectedState, t]
   );
+  const dueReminders = Object.values(savedReminders).filter((reminder) => {
+    if (!reminder || typeof reminder !== "object" || !reminder.due_date) return false;
+    const due = new Date(`${reminder.due_date}T00:00:00`);
+    if (Number.isNaN(due.getTime())) return false;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const soon = new Date(today);
+    soon.setDate(soon.getDate() + 7);
+    return due <= soon;
+  });
+  const formatReminderDate = (value) => {
+    const date = new Date(`${value}T00:00:00`);
+    const locale = language === "hi" ? "hi-IN" : language === "mr" ? "mr-IN" : "en-IN";
+    return date.toLocaleDateString(locale, { day: "numeric", month: "short" });
+  };
+
   return (
-    <main className="mx-auto w-full max-w-7xl px-4 py-6 pb-24 sm:px-6 lg:px-8 lg:pb-6">
-      <div className="grid gap-6 lg:grid-cols-[285px,1fr]">
+    <main className="farmer-dashboard mx-auto w-full max-w-7xl px-4 py-6 pb-24 sm:px-6 lg:px-8 lg:pb-6">
+      <div className="farmer-dashboard__content grid min-w-0 grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[285px,minmax(0,1fr)]">
         <Sidebar role={user?.role} moduleItems={tabs} activeModule={activeTab} onModuleChange={setActiveTab} />
         <MobileBottomNav items={tabs} activeModule={activeTab} onModuleChange={setActiveTab} />
 
-        <section className="space-y-6">
-          <div className="app-shell ambient-grid overflow-hidden p-5">
-            <div className="relative z-10 grid gap-5 xl:grid-cols-[1fr,390px] xl:items-center">
+        <section className="min-w-0 space-y-6">
+          {!isOnline ? <div className="border-l-2 border-warning-700 bg-warning-50 px-4 py-3 text-sm text-text-heading" role="status" aria-live="polite">
+            <p className="font-semibold">{t(hasOfflineSnapshot ? "farmer.offlineCached" : "farmer.offlineNoCache")}</p>
+            <p className="mt-1 text-xs text-text-muted">{t("farmer.offlineDetails")}</p>
+          </div> : null}
+          {dueReminders.length || farmDueCount ? (
+            <div className="flex flex-col gap-3 border-l-2 border-accent-500 bg-accent-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between" role="status" aria-live="polite">
+              <div>
+                <p className="text-sm font-semibold text-text-heading">{t("alerts.dueCount", undefined, { count: Math.max(dueReminders.length, farmDueCount) })}</p>
+                <ul className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-text-muted">
+                  {dueReminders.map((reminder, index) => <li key={`${reminder.due_date}-${reminder.title}-${index}`}>{reminder.title} · {formatReminderDate(reminder.due_date)}</li>)}
+                </ul>
+              </div>
+              <button type="button" className="theme-button-secondary min-h-10 px-3 py-2 text-xs" onClick={() => setActiveTab("alerts")}>{t("farmer.reviewReminders")}</button>
+            </div>
+          ) : null}
+          <div className="border-b border-surface-border pb-5">
+            <div className="grid gap-5">
               <div>
                 <span className="section-badge">{t("farmer.heroBadge")}</span>
-                <h1 className="mt-3 max-w-3xl text-4xl font-bold leading-tight text-text-heading sm:text-[2.8rem]">
+                <h1 className="mt-3 max-w-3xl text-2xl font-bold leading-tight text-text-heading sm:text-3xl">
                   {t("farmer.welcome")}, {user?.name}
                 </h1>
                 <p className="mt-3 max-w-2xl text-sm leading-6 text-text-muted">{t("farmer.intro")}</p>
-                <div className="mt-5 flex flex-wrap gap-3 text-sm">
-                  <span className="rounded-full border border-surface-border bg-surface-card px-4 py-2 text-text-muted">{t("farmer.state")}: {tv("states", selectedState)}</span>
-                  <span className="rounded-full border border-surface-border bg-surface-card px-4 py-2 text-text-muted">{t("farmer.season")}: {tv("seasons", selectedSeason)}</span>
-                  <span className="rounded-full border border-accent-300 bg-accent-50 px-4 py-2 text-accent-700">{t("farmer.weatherReady")}: {liveWeather ? t("farmer.yes") : t("farmer.no")}</span>
-                </div>
+                <dl className="mt-4 flex flex-wrap gap-x-6 gap-y-2 border-l-2 border-accent-300 pl-3 text-sm">
+                  <div><dt className="text-xs text-text-muted">{t("farmer.state")}</dt><dd className="mt-0.5 font-semibold text-text-heading">{tv("states", selectedState)}</dd></div>
+                  <div><dt className="text-xs text-text-muted">{t("farmer.season")}</dt><dd className="mt-0.5 font-semibold text-text-heading">{tv("seasons", selectedSeason)}</dd></div>
+                  <div><dt className="text-xs text-text-muted">{t("farmer.weatherReady")}</dt><dd className={`mt-0.5 font-semibold ${liveWeather ? "text-success-700" : "text-text-muted"}`}>{liveWeather ? t("farmer.yes") : t("farmer.no")}</dd></div>
+                </dl>
               </div>
 
-              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
-                <MetricCard title={t("farmer.role")} value={tv("roles", user?.role || "farmer")} subtitle={t("farmer.roleSubtitle")} accent="accent" />
-                <MetricCard title={t("farmer.latestCrop")} value={latestCropDisplay} subtitle={t("farmer.latestCropSubtitle")} accent="success" />
-              </div>
             </div>
           </div>
 
+          <section className="dashboard-snapshot" aria-labelledby="dashboard-snapshot-title">
+            <h2 id="dashboard-snapshot-title" className="text-sm font-semibold text-text-heading">{t("farmer.decisionSummary")}</h2>
+            <div className="dashboard-snapshot__grid">
+              <div className="dashboard-snapshot__item border-primary-300">
+                <p className="text-xs text-text-muted">{t("farmIntelligence.fieldLabel")}</p>
+                <p className="dashboard-snapshot__value mt-1 break-words">{selectedField?.name || t("farmIntelligence.selectField")}</p>
+                <p className="mt-1 truncate text-xs text-text-subtle">{selectedField?.area_ha ? `${selectedField.area_ha} ha` : selectedField?.farmName || ""}</p>
+              </div>
+              <div className="dashboard-snapshot__item border-accent-400">
+                <p className="text-xs text-text-muted">{t("farmer.latestCrop")}</p>
+                <p className="dashboard-snapshot__value mt-1 break-words capitalize">{latestCropDisplay}</p>
+                <p className="mt-1 text-xs text-text-subtle">{t("farmer.latestCropSubtitle")}</p>
+              </div>
+              <div className="dashboard-snapshot__item border-sky-600">
+                <p className="text-xs text-text-muted">{t("farmer.weatherSnapshot")}</p>
+                <p className="dashboard-snapshot__value mt-1 break-words">{form.temperature ? `${form.temperature} °C` : "-"}</p>
+                <p className="mt-1 text-xs text-text-subtle">{liveWeather ? t("farmer.weatherReady") : `${form.humidity || "-"}% · ${form.rainfall || "-"} mm`}</p>
+              </div>
+              <div className="dashboard-snapshot__item border-warning-700">
+                <p className="text-xs text-text-muted">{t("farmer.alerts", "Alerts")}</p>
+                <p className="dashboard-snapshot__value mt-1 tabular-nums">{Math.max(dueReminders.length, farmDueCount)}</p>
+                <p className="mt-1 text-xs leading-5 text-text-subtle">{farmDueCount || dueReminders.length ? t("alerts.dueCount", undefined, { count: Math.max(dueReminders.length, farmDueCount) }) : t("farmer.noAlerts", "No reminders due")}</p>
+              </div>
+            </div>
+          </section>
+
           {activeTab === "crop" ? (
             <div className="tab-panel space-y-6">
-              <div className="grid gap-6">
-                <section className="surface-card p-5">
+              <FarmWorkspace
+                crop={result?.crop || ""}
+                fieldId={fieldId}
+                userId={user?.id || user?.email}
+                  onContextChange={(nextFarmId, nextFieldId, nextField) => {
+                    setFarmId(nextFarmId || "");
+                    setFieldId(nextFieldId || "");
+                    setSelectedField(nextField || null);
+                    setSoilTasks([]);
+                }}
+              />
+              <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-6">
+                <section className="surface-card min-w-0 p-4 sm:p-5">
                   <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
                     <div>
                       <span className="section-badge">{t("farmer.workflow")}</span>
-                      <h2 className="mt-4 text-3xl font-semibold text-text-heading">{t("farmer.cropFormTitle")}</h2>
+                      <h2 className="mt-3 text-xl font-semibold text-text-heading sm:text-2xl">{t("farmer.cropFormTitle")}</h2>
                       <p className="mt-2 max-w-2xl text-sm leading-6 text-text-muted">{t("farmer.cropFormSubtitle")}</p>
                     </div>
                     <button type="button" onClick={fetchWeatherForLocation} disabled={weatherLoading} className="theme-button-secondary w-full whitespace-nowrap px-5 py-3 sm:w-auto">
@@ -518,7 +705,7 @@ function FarmerDashboard() {
                         const sliderValue = form[field] === "" ? range.fallback : form[field];
 
                         return (
-                          <label key={field} className="surface-card-soft space-y-2 p-3">
+                          <label key={field} className="space-y-2 border-b border-surface-border pb-3">
                             <div className="flex items-center justify-between gap-3">
                               <span className="text-sm font-medium text-text-heading">{tv("features", field)}</span>
                               <span className="rounded-full border border-accent-200 bg-accent-50 px-3 py-1 text-xs font-semibold text-accent-800">
@@ -574,11 +761,21 @@ function FarmerDashboard() {
                         <p className="mt-2 text-xs leading-5 text-text-muted">{t("farmer.advisorySubtitle")}</p>
                       </div>
                       <div className="flex flex-col gap-2 sm:flex-row">
-                        <button type="button" onClick={printAdvisory} className="theme-button-secondary px-4 py-2.5">{t("farmer.printPdf")}</button>
+                        <button type="button" onClick={printAdvisory} className="theme-button-secondary min-h-11 px-4 py-2.5">{t("farmer.printPdf")}</button>
+                        <FarmReportButton
+                          farmId={farmId}
+                          fieldId={fieldId}
+                          userId={user?.id || user?.email}
+                          result={result}
+                          advisory={advisory}
+                          predictions={combinedPredictions}
+                          tasks={soilTasks}
+                          weatherForecast={weatherForecast}
+                        />
                       </div>
                     </div>
                   </div>
-                  <div className="mobile-sticky-crop-summary" aria-label="Current crop recommendation">
+                  <div className="mobile-sticky-crop-summary" aria-label={t("farmer.currentRecommendation")}>
                     <div>
                       <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-text-subtle">{t("cropCard.recommended")}</p>
                       <p className="mt-1 text-base font-bold capitalize text-primary-800">{tv("crops", result.crop)}</p>
@@ -592,14 +789,14 @@ function FarmerDashboard() {
                     <section className="rounded-3xl border border-warning-100 bg-warning-50 p-5">
                       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                         <div>
-                          <span className="section-badge">Review recommendation</span>
-                          <h3 className="mt-3 text-xl font-semibold text-text-heading">Low-confidence crop prediction</h3>
+                          <span className="section-badge">{t("farmer.reviewRecommendation")}</span>
+                          <h3 className="mt-3 text-xl font-semibold text-text-heading">{t("farmer.lowConfidenceTitle")}</h3>
                           <p className="mt-2 max-w-2xl text-sm leading-6 text-text-muted">
                             {result.confidenceNote || "The model still returned the best crop, but the score is below the configured confidence threshold. Compare the alternatives before making a field decision."}
                           </p>
                         </div>
                         <div className="rounded-2xl border border-warning-200 bg-white px-4 py-3 text-sm">
-                          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-warning-700">Threshold</p>
+                          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-warning-700">{t("farmer.confidenceThreshold", "Threshold")}</p>
                           <p className="mt-1 font-semibold text-text-heading">
                             {Number((result.confidenceThreshold || 0) * 100).toFixed(0)}%
                           </p>
@@ -616,7 +813,6 @@ function FarmerDashboard() {
                     </section>
                   ) : null}
                   <CropCard crop={result.crop} confidence={result.confidence} irrigation={result.irrigation} imageSrc={cropImage} advisory={advisory} />
-                  <RationaleCard farmId={farmId} fieldId={fieldId} crop={result.crop} />
                 </section>
               ) : (
                 <section className="surface-card-highlight p-6">
@@ -647,31 +843,57 @@ function FarmerDashboard() {
           {activeTab === "soil" ? (
             <div className="tab-panel space-y-6">
               <ProductionOutlookCard outlook={advisory?.production_outlook} />
+              <WeatherSignals forecast={weatherForecast} />
               <PestOutbreakCard forecast={pestForecast} loading={pestLoading} status={pestForecastStatus} />
+              <FieldTimeline
+                irrigation={advisory?.irrigation}
+                pestForecast={pestForecast}
+                harvest={advisory?.production_outlook?.harvest_window}
+                weatherForecast={weatherForecast}
+                soilTasks={soilTasks}
+                onCompleteTask={completeSoilTask}
+                onOpenItem={openTimelineItem}
+              />
               <SoilRestorationCard plan={advisory?.soil_restoration} onStart={() => setActiveTab("crop")} />
+              <SoilPlanningWorkspace
+                farmId={farmId}
+                fieldId={fieldId}
+                proposal={advisory?.soil_restoration}
+                plantingDate={plantingDate}
+                onOpenFarm={() => setActiveTab("crop")}
+                tasks={soilTasks}
+                predictions={combinedPredictions}
+                onTasksChange={setSoilTasks}
+              />
             </div>
           ) : null}
           {activeTab === "ai" ? <div className="tab-panel"><AskAiAssistant context={aiContext} /></div> : null}
 
+          <div className={activeTab === "alerts" ? "tab-panel" : "hidden"}>
+            <AlertsCenter farmId={farmId} userId={user?.id} onOpenModule={setActiveTab} onDueCountChange={setFarmDueCount} />
+          </div>
+
           {activeTab === "history" ? (
-            <section className="surface-card tab-panel p-6">
+            <section className="surface-card tab-panel min-w-0 p-4 sm:p-6">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
                 <div>
                   <span className="section-badge">{t("farmer.historyEyebrow")}</span>
-                  <h2 className="mt-4 text-3xl font-semibold text-text-heading">{t("farmer.historyTitle")}</h2>
+                  <h2 className="mt-2 text-xl font-semibold text-text-heading sm:text-2xl">{t("farmer.historyTitle")}</h2>
                 </div>
                 <p className="text-sm text-text-muted">{t("farmer.historySubtitle")}</p>
               </div>
 
+              {!historyLoading ? <div className="mt-6 min-w-0"><PredictionComparison rows={combinedPredictions} /></div> : null}
+
               {historyLoading ? (
                 <div className="mt-6">
-                  <LoadingSkeleton cards={4} rows={2} className="lg:grid-cols-2" />
+                  <LoadingSkeleton cards={4} rows={2} label={t("farmer.recentPredictions")} className="lg:grid-cols-2" />
                 </div>
               ) : (
                 <div className="mt-6 grid gap-3 lg:grid-cols-2">
                   {combinedPredictions.slice(0, 8).map((row, index) => (
                     <div key={`${row.ids?.join("-") || row.id || index}`} className="surface-card-soft interactive-lift p-4 transition-all duration-200 hover:border-accent-200">
-                      <p className="text-[11px] uppercase tracking-[0.2em] text-text-subtle">{row.timestamp || "-"}</p>
+                      <p className="text-xs tabular-nums text-text-subtle">{formatHistoryDate(row.timestamp, language)}</p>
                       <div className="mt-4 grid gap-3 sm:grid-cols-2">
                         <div>
                           <p className="text-xs text-text-subtle">{t("farmer.crop")}</p>
@@ -686,7 +908,15 @@ function FarmerDashboard() {
                       </div>
                     </div>
                   ))}
-                  {!predictions.length ? <p className="text-sm text-text-muted">{t("farmer.noPredictions")}</p> : null}
+                  {!combinedPredictions.length ? (
+                    <div className="col-span-full">
+                      <EmptyState
+                        title={t("farmer.noPredictions")}
+                        description={t("farmer.historyEmptyDesc")}
+                        action={<button type="button" onClick={() => setActiveTab("crop")} className="theme-button-primary px-4 py-2.5">{t("farmer.startPrediction")}</button>}
+                      />
+                    </div>
+                  ) : null}
                 </div>
               )}
             </section>

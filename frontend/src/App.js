@@ -8,6 +8,7 @@ import LoginPage from "./pages/LoginPage";
 import SignupPage from "./pages/SignupPage";
 import FarmerDashboard from "./pages/FarmerDashboard";
 import AdminDashboard from "./pages/AdminDashboard";
+import { useLanguage } from "./i18n/LanguageContext";
 
 function DashboardSwitch() {
   const { user } = useAuth();
@@ -25,11 +26,13 @@ function DashboardSwitch() {
 
 function App() {
   const location = useLocation();
+  const { t } = useLanguage();
 
   return (
     <div className="app-background">
+      <a className="skip-link" href="#main-content">{t("app.skipContent")}</a>
       <Navbar />
-      <div key={location.pathname} className="page-transition">
+      <div id="main-content" tabIndex={-1} key={location.pathname} className="page-transition">
         <Routes location={location}>
           <Route path="/" element={<LandingPage />} />
           <Route path="/login" element={<LoginPage />} />

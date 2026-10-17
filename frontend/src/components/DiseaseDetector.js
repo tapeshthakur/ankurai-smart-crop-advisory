@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import api from "../api/client";
 import LoadingSpinner from "./LoadingSpinner";
+import RiskBadge from "./RiskBadge";
 import { useLanguage } from "../i18n/LanguageContext";
 
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
@@ -86,6 +87,10 @@ function DiseaseDetector() {
   };
   const confidenceLabel = (status) => t(`disease.confidenceLevels.${status}`, status || "-");
   const qualityWarnings = result?.upload_quality?.warnings || [];
+  const rawConfidence = Number(result?.confidence);
+  const confidencePercent = Number.isFinite(rawConfidence)
+    ? Math.max(0, Math.min(100, rawConfidence <= 1 ? rawConfidence * 100 : rawConfidence))
+    : 0;
 
   return (
     <section className="surface-card p-4 sm:p-6">
@@ -119,7 +124,7 @@ function DiseaseDetector() {
         >
           {previewUrl ? (
             <div className="w-full">
-              <img src={previewUrl} alt={t("disease.previewAlt")} className="aspect-[4/3] w-full rounded-[1.25rem] object-cover shadow-card" />
+              <img src={previewUrl} alt={t("disease.previewAlt")} className="aspect-[4/3] w-full rounded-[1.25rem] bg-surface-muted object-contain shadow-card" />
               <div className="mt-3 rounded-[1.1rem] border border-surface-border bg-surface-card p-3">
                 <div className="flex flex-col gap-2 text-left sm:flex-row sm:items-center sm:justify-between">
                   <div className="min-w-0">
@@ -132,8 +137,8 @@ function DiseaseDetector() {
                 </div>
                 <p className="mt-3 text-left text-xs leading-5 text-text-subtle">{t("disease.changeImage")}</p>
                 <div className="mt-3 flex flex-wrap gap-2">
-                  <label htmlFor="disease-camera" className="disease-capture-button disease-capture-button-primary">CAM <span>Retake</span></label>
-                  <label htmlFor="disease-gallery" className="disease-capture-button">IMG <span>Change photo</span></label>
+                  <label htmlFor="disease-camera" className="disease-capture-button disease-capture-button-primary">CAM <span>{t("disease.retake", "Retake")}</span></label>
+                  <label htmlFor="disease-gallery" className="disease-capture-button">IMG <span>{t("disease.changePhoto", "Change photo")}</span></label>
                 </div>
               </div>
               <div className="mt-3 rounded-[1.1rem] border border-accent-200 bg-accent-50 p-4 text-left">
@@ -190,13 +195,13 @@ function DiseaseDetector() {
               <p className="text-xl font-semibold text-text-heading">{t("disease.drop")}</p>
               <p className="mt-3 text-sm leading-6 text-text-muted">{t("disease.browse")}</p>
               <div className="disease-capture-actions mt-5">
-                <label htmlFor="disease-camera" className="disease-capture-button disease-capture-button-primary">CAM <span>Take photo</span></label>
-                <label htmlFor="disease-gallery" className="disease-capture-button">IMG <span>Choose photo</span></label>
+                <label htmlFor="disease-camera" className="disease-capture-button disease-capture-button-primary">CAM <span>{t("disease.takePhoto", "Take photo")}</span></label>
+                <label htmlFor="disease-gallery" className="disease-capture-button">IMG <span>{t("disease.choosePhoto", "Choose photo")}</span></label>
               </div>
               <div className="disease-quality-guide mt-5">
-                <span>1 leaf</span>
-                <span>Good light</span>
-                <span>No blur</span>
+                <span>{t("disease.oneLeaf", "1 leaf")}</span>
+                <span>{t("disease.goodLight", "Good light")}</span>
+                <span>{t("disease.noBlur", "No blur")}</span>
               </div>
             </div>
           )}
@@ -220,25 +225,28 @@ function DiseaseDetector() {
 
           {result ? (
             <div className="mt-5 space-y-4">
-              <div className="surface-card-highlight p-5">
+              <div className="surface-card-highlight p-5" aria-live="polite">
                 <p className="text-[11px] uppercase tracking-[0.22em] text-accent-700">{t("disease.predicted")}</p>
                 <div className="mt-3 grid gap-4 lg:grid-cols-[1fr,auto] lg:items-end">
                   <div>
                     <p className="text-sm font-semibold uppercase tracking-[0.16em] text-text-subtle">{result.plant || t("disease.unknownPlant")}</p>
-                    <p className="mt-2 text-3xl font-bold text-text-heading">
+                    <p className="mt-2 break-words text-2xl font-bold text-text-heading sm:text-3xl">
                       {result.is_healthy ? t("disease.healthyStatus", "Healthy") : (result.condition || translateDiseaseName(result.disease))}
                     </p>
                   </div>
                   <div className="flex flex-wrap gap-2 lg:justify-end">
-                    <p className="rounded-full border border-accent-200 bg-accent-50 px-3 py-1 text-sm font-semibold text-accent-700">
-                      {Number(result.confidence).toFixed(2)}% {t("disease.confidence")}
+                    <p className="rounded-md border border-accent-200 bg-accent-50 px-3 py-1 text-sm font-semibold text-accent-800" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(confidencePercent)} aria-label={`${t("disease.confidence")}: ${confidencePercent.toFixed(1)}%`}>
+                      {confidencePercent.toFixed(1)}% {t("disease.confidence")}
                     </p>
-                    <p className="rounded-full border border-surface-border bg-surface-card px-3 py-1 text-sm font-semibold text-text-muted">
+                    <p className="rounded-md border border-surface-border bg-surface-card px-3 py-1 text-sm font-semibold text-text-muted">
                       {confidenceLabel(result.confidence_status)}
                     </p>
                   </div>
                 </div>
-                <p className="mt-3 text-sm capitalize text-text-muted">{t("disease.severity")}: {tv("statuses", result.severity)}</p>
+                <div className="mt-3 flex flex-wrap items-center gap-2 text-sm text-text-muted">
+                  <span>{t("disease.severity")}:</span>
+                  <RiskBadge level={result.severity} />
+                </div>
                 {result.warning ? (
                   <p className="mt-3 rounded-2xl border border-warning-100 bg-warning-50 px-4 py-3 text-sm leading-6 text-warning-700">
                     {result.warning}
